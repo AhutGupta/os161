@@ -153,9 +153,17 @@ lock_create(const char *name)
 		kfree(lock);
 		return NULL;
 	}
+	//KASSERT(!lock->lk_status);
 
-	// add stuff here as needed
-
+	lock->lk_wchan = wchan_create(lock->lk_name);
+	if (lock->lk_wchan == NULL) {
+		kfree(lock->lk_name);
+		kfree(lock);
+		return NULL;
+	}
+	spinlock_init(&lock->lk_lock);
+	lock->lk_thread = NULL;
+	lock->lk_status = 0;
 	return lock;
 }
 
@@ -163,9 +171,13 @@ void
 lock_destroy(struct lock *lock)
 {
 	KASSERT(lock != NULL);
+	
+	//This line for lt3. Causes panic
+	KASSERT(lock->lk_status == 0);
 
-	// add stuff here as needed
-
+	spinlock_cleanup(&lock->lk_lock);
+	wchan_destroy(lock->lk_wchan);
+	lock->lk_thread = NULL;
 	kfree(lock->lk_name);
 	kfree(lock);
 }
@@ -173,27 +185,39 @@ lock_destroy(struct lock *lock)
 void
 lock_acquire(struct lock *lock)
 {
-	// Write this
+	KASSERT(lock != NULL);
+	KASSERT(curthread->t_in_interrupt == false);
+	spinlock_acquire(&lock->lk_lock);
+	while(lock->lk_status == 1){
+		wchan_sleep(lock->lk_wchan, &lock->lk_lock);
+	}
+	KASSERT(lock->lk_status == 0);
+	lock->lk_status = 1;
+	lock->lk_thread = curthread;
 
-	(void)lock;  // suppress warning until code gets written
+	spinlock_release(&lock->lk_lock);
 }
 
 void
 lock_release(struct lock *lock)
 {
-	// Write this
+	KASSERT(lock != NULL);
+	spinlock_acquire(&lock->lk_lock);
 
-	(void)lock;  // suppress warning until code gets written
+	if(lock_do_i_hold(lock)){
+		lock->lk_status = 0;
+		lock->lk_thread = NULL;
+		if(!wchan_isempty(lock->lk_wchan, &lock->lk_lock)){
+			wchan_wakeone(lock->lk_wchan, &lock->lk_lock);
+		}
+	}
+	spinlock_release(&lock->lk_lock);
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
-	// Write this
-
-	(void)lock;  // suppress warning until code gets written
-
-	return true; // dummy until code gets written
+	return (curthread == lock->lk_thread);
 }
 
 ////////////////////////////////////////////////////////////
