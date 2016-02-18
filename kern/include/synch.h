@@ -117,8 +117,11 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct wchan *cv_wchan;
+        struct spinlock cv_lock;
+        // volatile struct thread *cv_thread; // 2 different Threads : Producer and Consumer
+        // volatile unsigned buffer_size;
+        // volatile char *buffer_state;
 };
 
 struct cv *cv_create(const char *name);
@@ -153,8 +156,12 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
         char *rwlock_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        volatile int write_lock;
+        volatile int read_lock;
+        volatile int readers;
+        struct lock *rw_lock;
+        struct cv *cv_read;
+        struct cv *cv_write;
 };
 
 struct rwlock * rwlock_create(const char *);
