@@ -69,13 +69,37 @@
 #include <test.h>
 #include <synch.h>
 
+struct lock *lock0;
+struct lock *lock1;
+struct lock *lock2;
+struct lock *lock3;
+struct lock * lockquadrant(uint32_t);
+
 /*
  * Called by the driver during initialization.
  */
 
 void
 stoplight_init() {
+	lock0 = lock_create("lock0");
+	lock1 = lock_create("lock1");
+	lock2 = lock_create("lock2");
+	lock3 = lock_create("lock3");
 	return;
+}
+
+struct lock * lockquadrant(uint32_t quad){
+	switch (quad) {
+		case 0:
+			return lock0;
+		case 1:
+			return lock1;
+		case 2:
+			return lock2;
+		case 3:
+			return lock3;
+	}
+	return lock0;
 }
 
 /*
@@ -83,36 +107,80 @@ stoplight_init() {
  */
 
 void stoplight_cleanup() {
-	return;
+	lock_destroy(lock0);
+	lock_destroy(lock1);
+	lock_destroy(lock2);
+	lock_destroy(lock3);
+return;
 }
 
+//Acquire lock for 1 quadrant. And move
 void
 turnright(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
+
+	lock_acquire(lockquadrant(direction));
+	inQuadrant(direction, index);
+	leaveIntersection(index);
+	lock_release(lockquadrant(direction));
 	return;
 }
+
+//Acquire the locks for 2 quadrants (in increasing order) and move.
 void
 gostraight(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	uint32_t newdir = (direction+3)%4;
+	uint32_t order[2];
+	if(newdir<direction){
+		order[0] = newdir;
+		order[1] = direction;
+	}
+	else{
+		order[0] = direction;
+		order[1] = newdir;
+	}
+	lock_acquire(lockquadrant(order[0]));
+	lock_acquire(lockquadrant(order[1]));
+	inQuadrant(direction, index);
+	inQuadrant(newdir, index);
+	leaveIntersection(index);
+	lock_release(lockquadrant(order[0]));
+	lock_release(lockquadrant(order[1]));
 	return;
 }
+
+//Acquire locks for 3 quadrants in increasing order and move.
 void
 turnleft(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	uint32_t first = (direction+3)%4;
+	uint32_t second = (direction+2)%4;
+	uint32_t order[3];
+	if(direction<first){
+		order[0] = direction;
+		order[1] = second;
+		order[2] = first;
+	}
+	else if(direction<second){
+		order[0] = first;
+		order[1] = direction;
+		order[2] = second;
+	}
+	else{
+		order[0] = second;
+		order[1] = first;
+		order[2] = direction;
+	}
+	lock_acquire(lockquadrant(order[0]));
+	lock_acquire(lockquadrant(order[1]));
+	lock_acquire(lockquadrant(order[2]));
+	inQuadrant(direction, index);
+	inQuadrant(first, index);
+	inQuadrant(second, index);
+	leaveIntersection(index);
+	lock_release(lockquadrant(order[0]));	
+	lock_release(lockquadrant(order[1]));
+	lock_release(lockquadrant(order[2]));
 	return;
 }
