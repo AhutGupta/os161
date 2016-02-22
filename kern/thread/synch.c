@@ -412,7 +412,7 @@ void rwlock_acquire_read(struct rwlock *rwlock){
 	KASSERT(rwlock != NULL);
 	
 	lock_acquire(rwlock->r_lock);
-	while(rwlock->write_lock != 0){
+	while(rwlock->write_lock != 0 || rwlock->readers == 0){
 		cv_wait(rwlock->cv_read, rwlock->r_lock);
 	}
 	rwlock->read_lock = 1;
@@ -435,6 +435,7 @@ void rwlock_release_read(struct rwlock *rwlock){
 	rwlock->readers--;
 	if(rwlock->readers == 0){
 		cv_signal(rwlock->cv_write, rwlock->r_lock);
+		cv_signal(rwlock->cv_read, rwlock->r_lock);
 	}
 	lock_release(rwlock->r_lock);
 }
