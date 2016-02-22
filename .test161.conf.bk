@@ -1,0 +1,10 @@
+---
+rootdir: /home/ahut/os161/
+test161dir: /home/ahut/os161/test161/
+server: https://test161.ops-class.org
+repository: git@gitlab.com:ahut/assignment1.git
+users:
+  - email: "nisargsa@buffalo.edu"
+    token: "3YYbpP5vynjWuE5iY"
+  - email: "ahutgupt@buffalo.edu"
+    token: "zXukbAZ7pi5mDMG6Y" 

@@ -44,7 +44,48 @@
  * Called by the driver during initialization.
  */
 
+static struct semaphore *male_sem ;
+static struct semaphore *female_sem ;
+static struct semaphore *male_start_sem ;
+static struct semaphore *male_end_sem ;
+static struct semaphore *female_start_sem ;
+static struct semaphore *female_end_sem ;
+
 void whalemating_init() {
+
+	// male = kmalloc(sizeof(*male));
+	// if(male == NULL){
+	// 	return;
+	// }
+
+	// female = kmalloc(sizeof(*female));
+	// if(female == NULL){
+	// 	return;
+	// }
+	male_sem = sem_create("male_sem", 0);
+	if (male_sem == NULL) {
+		return;
+	}
+	female_sem = sem_create("female_sem", 0);
+	if (female_sem == NULL) {
+		return;
+	}
+	male_start_sem = sem_create("male_start_sem", 0);
+	if (male_start_sem == NULL) {
+		return;
+	}
+	male_end_sem = sem_create("male_end_sem", 0);
+	if (male_end_sem == NULL) {
+		return;
+	}
+	female_start_sem = sem_create("female_start_sem", 0);
+	if (female_start_sem == NULL) {
+		return;
+	}
+	female_end_sem = sem_create("female_end_sem", 0);
+	if (female_end_sem == NULL) {
+		return;
+	}
 	return;
 }
 
@@ -54,38 +95,65 @@ void whalemating_init() {
 
 void
 whalemating_cleanup() {
+	sem_destroy(male_sem);
+	sem_destroy(female_sem);
+	sem_destroy(male_start_sem);
+	sem_destroy(male_end_sem);
+	sem_destroy(female_start_sem);
+	sem_destroy(female_end_sem);
 	return;
 }
 
 void
 male(uint32_t index)
 {
-	(void)index;
+	// (void)index;
 	/*
 	 * Implement this function by calling male_start and male_end when
 	 * appropriate.
 	 */
+	male_start(index);
+	V(male_sem);
+	P(male_start_sem);
+
+	
+
+	P(male_end_sem);
+	male_end(index);
 	return;
 }
 
 void
 female(uint32_t index)
 {
-	(void)index;
+	// (void)index;
 	/*
 	 * Implement this function by calling female_start and female_end when
 	 * appropriate.
 	 */
+	female_start(index);
+	V(female_sem);
+	P(female_start_sem);
+	P(female_end_sem);
+	female_end(index);
 	return;
 }
 
 void
 matchmaker(uint32_t index)
 {
-	(void)index;
+	// (void)index;
 	/*
 	 * Implement this function by calling matchmaker_start and matchmaker_end
 	 * when appropriate.
 	 */
+	P(male_sem);
+	P(female_sem);
+	V(male_start_sem);
+	V(female_start_sem);
+	matchmaker_start(index);
+	V(male_end_sem);
+	V(female_end_sem);
+	matchmaker_end(index);
 	return;
 }
