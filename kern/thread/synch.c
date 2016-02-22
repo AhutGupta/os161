@@ -392,9 +392,13 @@ struct rwlock * rwlock_create(const char *name){
 void rwlock_destroy(struct rwlock *rwlock)
 {
     KASSERT(rwlock != NULL);
-    lock_destroy(rwlock->rw_lock);
+    lock_destroy(rwlock->r_lock);
     cv_destroy(rwlock->cv_read);
     cv_destroy(rwlock->cv_write);
+    cv_destroy(rw_lock->w_lock);
+    rwlock->write_lock = NULL;
+    rwlock->read_lock = NULL;
+    rwlock->readers = NULL;
     kfree(rwlock->rwlock_name);
     kfree(rwlock);
 }
@@ -402,40 +406,40 @@ void rwlock_destroy(struct rwlock *rwlock)
 void rwlock_acquire_read(struct rwlock *rwlock){
 	KASSERT(rwlock != NULL);
 	
-	lock_acquire(rwlock->rw_lock);
+	lock_acquire(rwlock->r_lock);
 	while(rwlock->write_lock != 0){
-		cv_wait(rwlock->cv_read, rwlock->rw_lock);
+		cv_wait(rwlock->cv_read, rwlock->r_lock);
 	}
 	rwlock->read_lock = 1;
 	rwlock->readers++;
-	lock_release(rwlock->rw_lock);
+	lock_release(rwlock->r_lock);
 }
 
 void rwlock_acquire_write(struct rwlock *rwlock){
 	KASSERT(rwlock != NULL);
-	lock_acquire(rwlock->rw_lock);
+	lock_acquire(rwlock->w_lock);
 	while( rwlock->write_lock == 1 || rwlock->read_lock == 1){
-		cv_wait(rwlock->cv_write, rwlock->rw_lock);
+		cv_wait(rwlock->cv_write, rwlock->w_lock);
 	}
 	rwlock->write_lock = 1;
-	lock_release(rwlock->rw_lock);
+	lock_release(rwlock->w_lock);
 }
 
 void rwlock_release_read(struct rwlock *rwlock){
-	lock_acquire(rwlock->rw_lock);
+	lock_acquire(rwlock->r_lock);
 	rwlock->readers--;
 	if(rwlock->readers == 0){
-		cv_signal(rwlock->cv_write, rwlock->rw_lock);
+		cv_signal(rwlock->cv_write, rwlock->r_lock);
 	}
-	lock_release(rwlock->rw_lock);
+	lock_release(rwlock->r_lock);
 }
 
 void rwlock_release_write(struct rwlock *rwlock){
-	lock_acquire(rwlock->rw_lock);
+	lock_acquire(rwlock->w_lock);
 	rwlock->write_lock = 0;
-	cv_signal(rwlock->cv_write, rwlock->rw_lock);
-	cv_signal(rwlock->cv_read, rwlock->rw_lock);
-	lock_release(rwlock->rw_lock);
+	cv_signal(rwlock->cv_write, rwlock->w_lock);
+	cv_signal(rwlock->cv_read, rwlock->w_lock);
+	lock_release(rwlock->w_lock);
 }
 
 
