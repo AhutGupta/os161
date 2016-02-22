@@ -159,7 +159,8 @@ struct rwlock {
         volatile int write_lock;
         volatile int read_lock;
         volatile int readers;
-        struct lock *rw_lock;
+        struct lock *r_lock;
+        struct lock *w_lock;
         struct cv *cv_read;
         struct cv *cv_write;
 };
