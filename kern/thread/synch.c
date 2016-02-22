@@ -400,7 +400,7 @@ void rwlock_destroy(struct rwlock *rwlock)
     lock_destroy(rwlock->r_lock);
     cv_destroy(rwlock->cv_read);
     cv_destroy(rwlock->cv_write);
-    cv_destroy(rwlock->w_lock);
+    lock_destroy(rwlock->w_lock);
     //rwlock->write_lock = NULL;
     //rwlock->read_lock = NULL;
     //rwlock->readers = NULL;
