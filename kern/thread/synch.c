@@ -365,9 +365,14 @@ struct rwlock * rwlock_create(const char *name){
     	return NULL;
   	}
 
-  	rwlock->rw_lock = lock_create(rwlock->rwlock_name);
-  	if (rwlock->rw_lock == NULL){
-    	lock_destroy(rwlock->rw_lock);
+  	rwlock->r_lock = lock_create(rwlock->rwlock_name);
+  	if (rwlock->r_lock == NULL){
+    	lock_destroy(rwlock->r_lock);
+    	return NULL;
+  	}
+  	rwlock->w_lock = lock_create(rwlock->rwlock_name);
+  	if (rwlock->w_lock == NULL){
+    	lock_destroy(rwlock->w_lock);
     	return NULL;
   	}
 
@@ -395,10 +400,10 @@ void rwlock_destroy(struct rwlock *rwlock)
     lock_destroy(rwlock->r_lock);
     cv_destroy(rwlock->cv_read);
     cv_destroy(rwlock->cv_write);
-    cv_destroy(rw_lock->w_lock);
-    rwlock->write_lock = NULL;
-    rwlock->read_lock = NULL;
-    rwlock->readers = NULL;
+    cv_destroy(rwlock->w_lock);
+    //rwlock->write_lock = NULL;
+    //rwlock->read_lock = NULL;
+    //rwlock->readers = NULL;
     kfree(rwlock->rwlock_name);
     kfree(rwlock);
 }
