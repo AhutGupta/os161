@@ -412,7 +412,7 @@ void rwlock_acquire_read(struct rwlock *rwlock){
 	KASSERT(rwlock != NULL);
 	
 	lock_acquire(rwlock->r_lock);
-	while(rwlock->write_lock != 0 || rwlock->readers == 0){
+	while(rwlock->write_lock == 1 || rwlock->readers == 0){
 		cv_wait(rwlock->cv_read, rwlock->r_lock);
 	}
 	rwlock->read_lock = 1;
@@ -422,12 +422,12 @@ void rwlock_acquire_read(struct rwlock *rwlock){
 
 void rwlock_acquire_write(struct rwlock *rwlock){
 	KASSERT(rwlock != NULL);
-	lock_acquire(rwlock->w_lock);
+	lock_acquire(rwlock->r_lock);
 	while( rwlock->write_lock == 1 || rwlock->read_lock == 1){
-		cv_wait(rwlock->cv_write, rwlock->w_lock);
+		cv_wait(rwlock->cv_write, rwlock->r_lock);
 	}
 	rwlock->write_lock = 1;
-	lock_release(rwlock->w_lock);
+	lock_release(rwlock->r_lock);
 }
 
 void rwlock_release_read(struct rwlock *rwlock){
@@ -435,17 +435,17 @@ void rwlock_release_read(struct rwlock *rwlock){
 	rwlock->readers--;
 	if(rwlock->readers == 0){
 		cv_signal(rwlock->cv_write, rwlock->r_lock);
-		cv_signal(rwlock->cv_read, rwlock->r_lock);
+		cv_broadcast(rwlock->cv_read, rwlock->r_lock);
 	}
 	lock_release(rwlock->r_lock);
 }
 
 void rwlock_release_write(struct rwlock *rwlock){
-	lock_acquire(rwlock->w_lock);
+	lock_acquire(rwlock->r_lock);
 	rwlock->write_lock = 0;
-	cv_signal(rwlock->cv_write, rwlock->w_lock);
-	cv_signal(rwlock->cv_read, rwlock->w_lock);
-	lock_release(rwlock->w_lock);
+	cv_signal(rwlock->cv_write, rwlock->r_lock);
+	cv_signal(rwlock->cv_read, rwlock->r_lock);
+	lock_release(rwlock->r_lock);
 }
 
 
