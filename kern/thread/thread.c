@@ -50,6 +50,7 @@
 #include <addrspace.h>
 #include <mainbus.h>
 #include <vnode.h>
+#include <limits.h>
 
 
 /* Magic number used as a guard value on kernel thread stacks. */
@@ -146,6 +147,11 @@ thread_create(const char *name)
 	thread->t_iplhigh_count = 1; /* corresponding to t_curspl */
 
 	/* If you add to struct thread, be sure to initialize here */
+
+	//Initialize the File table
+	for(int i=0; i<OPEN_MAX; i++){
+		thread->file_table[i] = NULL;
+	}
 
 	return thread;
 }

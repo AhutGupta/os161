@@ -44,6 +44,8 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <thread.h>
+#include <kern/file.h>
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -58,6 +60,7 @@ runprogram(char *progname)
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
+	
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -94,6 +97,12 @@ runprogram(char *progname)
 	result = as_define_stack(as, &stackptr);
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+
+	/*Initialize the Thread's File Table. Set File descriptors for Console (stdin, stdout and stderr)*/
+	result = initial_ftable();
+	if(result){
 		return result;
 	}
 

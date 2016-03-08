@@ -56,6 +56,22 @@ __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
  * Prototypes for IN-KERNEL entry points for system call implementations.
  */
 
+ struct file_handle {
+
+	int flags;
+	off_t offset;
+	int ref_count;
+	struct lock* filelock;
+	struct vnode* vnode;
+};
+
+int initial_ftable(void);
+int sys_open(const_userptr_t filename, int flags, int mode, int *retval);
+int sys_close(int fd, int *retval);
+int sys_read(int fd, void *buf, size_t buflen, int *retval);
+int sys_write(int fd, const void *buf, size_t nbytes, int *retval);
+off_t lseek(int fd, off_t pos, int whence);
+
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 

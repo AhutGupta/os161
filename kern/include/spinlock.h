@@ -36,6 +36,7 @@
  */
 
 #include <cdefs.h>
+ #include <types.h>
 
 /* Inlining support - for making sure an out-of-line copy gets built */
 #ifndef SPINLOCK_INLINE

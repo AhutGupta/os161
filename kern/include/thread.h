@@ -39,6 +39,8 @@
 #include <array.h>
 #include <spinlock.h>
 #include <threadlist.h>
+#include <limits.h>
+#include <syscall.h>
 
 struct cpu;
 
@@ -116,6 +118,9 @@ struct thread {
 	 */
 
 	/* add more here as needed */
+
+	/* Filetable */
+	struct file_handle *file_table[OPEN_MAX];
 };
 
 /*

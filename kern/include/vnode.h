@@ -31,6 +31,7 @@
 #define _VNODE_H_
 
 #include <spinlock.h>
+#include <types.h>
 struct uio;
 struct stat;
 
