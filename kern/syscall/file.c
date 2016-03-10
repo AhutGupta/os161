@@ -11,6 +11,7 @@
 #include <thread.h>
 #include <kern/fcntl.h>
 #include <kern/stat.h>
+#include <kern/seek.h>
 #include <types.h>
 #include <kern/errno.h>
 #include <copyinout.h>
@@ -22,67 +23,45 @@
 
 
 int initial_ftable(void){
-	//panic('%s', "Entered......................");
 	struct vnode *vin, *vout, *verr;
-	char *console, *lock_name;
+	char *stdin, *stdout, *stderr;
 	int result;
-	
-	console = kstrdup("con:");
-	//KASSERT(console != NULL);
-	lock_name = kstrdup("con_lock");
-	// stdout = kstrdup("con:");
-	// stderr = kstrdup("con:");
-
-	//kfree(stdin);
-	//kfree(stdout);
-	//kfree(stderr);
-
+	stdin = kstrdup("con:");
 	//stdin
-	result = vfs_open(console, O_RDONLY, 0, &vin);
+	result = vfs_open(stdin, O_RDONLY, 0664, &vin);
 	if(result){
-		//kfree(console);
-		//panic('%d %s\n', &result, "Panic during stdin.................");
-		kfree(lock_name);
-
-
+		kfree(stdin);
 		return result;
 	}
 	curthread->file_table[0] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
 	curthread->file_table[0]->flags = O_RDONLY;
 	curthread->file_table[0]->offset = 0;
 	curthread->file_table[0]->ref_count = 1;
-	curthread->file_table[0]->filelock = lock_create(lock_name);
+	curthread->file_table[0]->filelock = lock_create(stdin);
 	curthread->file_table[0]->vnode = vin;
 	
-		//stdout
-	result = vfs_open(console, O_WRONLY, 0, &vout);
+	//stdout
+	stdout = kstrdup("con:");
+	result = vfs_open(stdout, O_WRONLY, 0664, &vout);
 	if(result){
-		kfree(console);
-		//panic('%d %s\n', &result, "Panic during stdout.................");
-
-		kfree(lock_name); 
-
+		kfree(stdin);
+		kfree(stdout); 
 		return result;
 	}
 	curthread->file_table[1] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
 	curthread->file_table[1]->flags = O_WRONLY;
 	curthread->file_table[1]->offset = 0;
 	curthread->file_table[1]->ref_count = 1;
-	curthread->file_table[1]->filelock = lock_create(lock_name);
+	curthread->file_table[1]->filelock = lock_create(stdout);
 	curthread->file_table[1]->vnode = vout;
 
-	//console = kstrdup("con:");
-	KASSERT(console != NULL);
 	//stderr
-	result = vfs_open(console, O_WRONLY, 0, &verr);
+	stderr = kstrdup("con:");
+	result = vfs_open(stderr, O_WRONLY, 0664, &verr);
 	if(result){
-		//panic('%d %s\n', &result, "Panic during stderr.................");
-
-		kprintf("........................result = ");
-		//kprintf(result);
-		kfree(console);
-		kfree(lock_name); 
-
+		kfree(stdin);
+		kfree(stdout); 
+		kfree(stderr);
 		return result;
 
 	}
@@ -90,28 +69,24 @@ int initial_ftable(void){
 	curthread->file_table[2]->flags = O_WRONLY;
 	curthread->file_table[2]->offset = 0;
 	curthread->file_table[2]->ref_count = 1;
-	curthread->file_table[2]->filelock = lock_create(lock_name);
+	curthread->file_table[2]->filelock = lock_create(stderr);
 	curthread->file_table[2]->vnode = verr;
 
-//panic ("Got here\n\n\n");
-
 	return 0;
-
 }
 
 
-int sys_open(const_userptr_t filename, int flags, int mode, int *retval){
+int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval){
 	struct vnode* fileobject;
 	int fd = 3, result;
 	char *name = (char *) kmalloc(sizeof(char)*PATH_MAX);
 	size_t name_len;
 	
-
 	//Stat struct for getting the size of the file. (VOP_STAT)
 	struct stat *file_stat = (struct stat*) kmalloc(sizeof(struct stat*));
 	
 
-	result = copyinstr(filename, name, PATH_MAX, &name_len);
+	result = copyinstr((const_userptr_t) filename, name, PATH_MAX, &name_len);
 	if(result) {
 		kprintf("FILE OPEN - copyinstr failed- %d\n",result);
 		kfree(name);
@@ -119,7 +94,8 @@ int sys_open(const_userptr_t filename, int flags, int mode, int *retval){
 	}
 
 	// Check for Flags.
-	if(flags!=O_RDONLY || flags!=O_WRONLY || flags!= O_RDWR){
+	//Not Done***********************************
+	if(!((flags & O_ACCMODE) == O_RDONLY || (flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR)){
 		return EINVAL;
 	}
 	
@@ -136,12 +112,15 @@ int sys_open(const_userptr_t filename, int flags, int mode, int *retval){
 	curthread->file_table[fd] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
 	if(curthread->file_table[fd] == NULL)
 	{
+        	kfree(name);
         	return ENFILE; 
       	} 
 	  	
   	result = vfs_open(name, flags, mode, &fileobject);
-	if(result)
-    		return result;
+	if(result){
+		kfree(name);
+ 		return result;
+	}
 	
 	curthread->file_table[fd]->flags = flags;
 	
@@ -187,8 +166,8 @@ int sys_close(int fd, int *retval){
 
 int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
-	struct iovec *readbuffer = (struct iovec*) kmalloc(sizeof(struct iovec*));
-	struct uio *buffer = (struct uio*) kmalloc(sizeof(struct uio*));
+	struct iovec iov;
+	struct uio u;
 	void *mem_buf = (void *) kmalloc(buflen);
 	int result;
 
@@ -198,7 +177,7 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 		return EBADF;
 	}
 
-	result = copyin((const_userptr_t) buf, mem_buf, IOV_MAX);
+	result = copyin((const_userptr_t) buf, mem_buf, buflen);
 	if(result){
 		kprintf("Bad pointer...\n");
 		return EFAULT;
@@ -206,11 +185,11 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
 	lock_acquire(curthread->file_table[fd]->filelock);
 
-	uio_kinit(readbuffer, buffer, buf, buflen, curthread->file_table[fd]->offset, UIO_READ);
-	buffer->uio_segflg = UIO_USERSPACE;
-	buffer->uio_space = curthread->t_proc->p_addrspace;
+	uio_kinit(&iov, &u, buf, buflen, curthread->file_table[fd]->offset, UIO_READ);
+	u.uio_segflg = UIO_USERSPACE;
+	u.uio_space = curthread->t_proc->p_addrspace;
 
-	result = VOP_READ(curthread->file_table[fd]->vnode, buffer);
+	result = VOP_READ(curthread->file_table[fd]->vnode, &u);
 	if(result){
 		kprintf("Error during read\n");
 		kfree(mem_buf);
@@ -218,8 +197,8 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 		return EIO;
 	}
 
-	*retval = buflen-buffer->uio_resid;
-	curthread->file_table[fd]->offset = buffer->uio_offset;
+	*retval = buflen-u.uio_resid;
+	curthread->file_table[fd]->offset = u.uio_offset;
 
 	kfree(mem_buf);
 	lock_release(curthread->file_table[fd]->filelock);
@@ -229,18 +208,19 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
 int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 
-	struct iovec *writebuffer = (struct iovec*) kmalloc(sizeof(struct iovec*));
-	struct uio *buffer = (struct uio*) kmalloc(sizeof(struct uio*));
+	struct iovec iov;
+	struct uio u;
 	void *mem_buf = (void *) kmalloc(nbytes);
 	int result;
 
 	if(fd<0 || fd>OPEN_MAX || curthread->file_table[fd] == NULL || curthread->file_table[fd]->flags == O_RDONLY){
 
+		kprintf("in sys_write.................\n");
 		kprintf("Invalid File Descriptor\n");
 		return EBADF;
 	}
 
-	result = copyin((const_userptr_t) buf, mem_buf, IOV_MAX);
+	result = copyin((const_userptr_t) buf, mem_buf, nbytes);
 	if(result){
 		kprintf("Bad pointer...\n");
 		return EFAULT;
@@ -250,11 +230,20 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 
 	lock_acquire(curthread->file_table[fd]->filelock);
 
-	uio_kinit(writebuffer, buffer, (void *)buf, nbytes, curthread->file_table[fd]->offset, UIO_READ);
-	buffer->uio_segflg = UIO_USERSPACE;
-	buffer->uio_space = curthread->t_proc->p_addrspace;
+	uio_kinit(&iov, &u, (void *) buf, nbytes, curthread->file_table[fd]->offset, UIO_WRITE);
+	u.uio_segflg = UIO_USERSPACE;
+	u.uio_space = curthread->t_proc->p_addrspace;	
 
-	result = VOP_WRITE(curthread->file_table[fd]->vnode, buffer);
+	// if(curthread->file_table[fd]->vnode == NULL){
+	// 	panic("Null pointer in sys_write......\n");
+	// 	return -1;
+	// }
+	// if(curthread->file_table[fd]->vnode->vn_ops == NULL){
+	// 	panic("VN_OPS is null for vnode object....\n");
+	// 	return -1;
+	// }
+
+	result = VOP_WRITE(curthread->file_table[fd]->vnode, &u);
 	if(result){
 		kprintf("Error during write\n");
 		kfree(mem_buf);
@@ -262,28 +251,126 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 		return EIO;
 	}
 
-	*retval = nbytes-buffer->uio_resid;
-	curthread->file_table[fd]->offset = buffer->uio_offset;
+	*retval = nbytes-u.uio_resid;
+	curthread->file_table[fd]->offset = u.uio_offset;
 
 	kfree(mem_buf);
 	lock_release(curthread->file_table[fd]->filelock);
 	return 0;
 }
 
-// off_t lseek(int fd, off_t pos, int whence){
 
-// 	if(fd<0 || fd>OPEN_MAX || curthread->file_table[fd] == NULL){
-// 		kprintf("Invalid File Descriptor\n")
-// 		return EBADF;
-// 	}
+int sys_lseek(int fd, off_t pos, int whence, off_t *retval_high){
 
-// 	if(fd <= 2){
-// 		kprintf("Seek not allowed on console..\n");
-// 		return ESPIPE;
-// 	}
+	off_t new_pos;
+	struct stat file_stat;
+	int stat_err;
 
-// 	if(!(whence == SEEK_SET || whence == SEEK_CUR || whence == SEEK_END)){
-// 		kprintf("Invalid Whence..\n");
-// 		return EINVAL;
-// 	}
-// }
+	if(fd<0 || fd>OPEN_MAX || curthread->file_table[fd] == NULL){
+		kprintf("Invalid File Descriptor\n");
+		return EBADF;
+	}
+
+	if(VOP_ISSEEKABLE(curthread->file_table[fd]->vnode)){
+		kprintf("Seek not allowed on console..\n");
+		return ESPIPE;
+	}
+
+	lock_acquire(curthread->file_table[fd]->filelock);
+
+	switch(whence){
+		
+		case SEEK_SET:
+		new_pos = pos;
+		break;
+
+		case SEEK_CUR:
+		new_pos = curthread->file_table[fd]->offset+pos;
+		break;
+
+		case SEEK_END:
+		stat_err = VOP_STAT(curthread->file_table[fd]->vnode, &file_stat);
+		if(stat_err){
+			lock_release(curthread->file_table[fd]->filelock);
+			return stat_err;
+		}
+		new_pos = file_stat.st_size + pos;
+		break;
+
+		default:
+		kprintf("WHENCE is invalid\n");
+		lock_release(curthread->file_table[fd]->filelock);
+		return EINVAL;
+
+	}
+
+	if(new_pos<0){
+		kprintf("Resulting seek value is negative\n");
+		lock_release(curthread->file_table[fd]->filelock);
+		return EINVAL;
+	}
+
+	// int result = VOP_TRYSEEK(curthread->file_table[fd]->vnode, new_pos);
+	// if(result){
+	// 	kprintf("Error During VOP_TRYSEEK\n");
+	// 	lock_release(curthread->file_table[fd]->filelock);
+	// 	return result;
+
+	// }
+
+	curthread->file_table[fd]->offset = new_pos;
+	*retval_high = new_pos;
+	lock_release(curthread->file_table[fd]->filelock);
+
+	return 0;
+}
+
+
+int sys_chdir(const char *pathname){
+	char *name = (char *) kmalloc(sizeof(char)*PATH_MAX);
+	size_t name_len;
+	int result;
+
+	result = copyinstr((const_userptr_t) pathname, name, PATH_MAX, &name_len);
+	if(result) {
+		kprintf("Wrong Path - copyinstr failed- %d\n",result);
+		kfree(name);
+		return EFAULT;
+	}
+
+	//ERROR CODES!!!!
+
+	result = vfs_chdir(name);
+	if(result){
+		kfree(name);
+		return ENOTDIR;
+	}
+
+	return 0;
+
+}
+
+
+int sys__getcwd(char *buf, size_t buflen, int *retval){
+
+	struct iovec iov;
+	struct uio u;
+	void *mem_buf = (void *) kmalloc(buflen);
+	int result;
+
+	result = copyin((const_userptr_t) buf, mem_buf, buflen);
+	if(result){
+		kprintf("Bad pointer...\n");
+		return EFAULT;
+	}
+
+	uio_kinit(&iov, &u, buf, buflen, 0, UIO_READ);
+	u.uio_segflg = UIO_USERSPACE;
+	u.uio_space = curthread->t_proc->p_addrspace;
+	result = vfs_getcwd(&u);
+    *retval = result;
+
+    return result;
+ }
+
+

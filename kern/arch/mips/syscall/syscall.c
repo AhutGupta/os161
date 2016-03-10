@@ -35,6 +35,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <copyinout.h>
+
 
 
 /*
@@ -80,6 +82,8 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
+	int whence;
+	off_t pos, retval_high;
 	int err;
 
 	KASSERT(curthread != NULL);
@@ -110,7 +114,7 @@ syscall(struct trapframe *tf)
 		break;
 
 		case SYS_open:
-		err = sys_open((const_userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
+		err = sys_open((const_userptr_t) tf->tf_a0, tf->tf_a1, (mode_t)tf->tf_a2, &retval);
 		break;
 
 		case SYS_close:
@@ -124,6 +128,23 @@ syscall(struct trapframe *tf)
 		case SYS_write:
 		err = sys_write(tf->tf_a0, (const void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 		break;
+
+		case SYS_chdir:
+		err = sys_chdir((const char *)tf->tf_a0);
+		break;
+
+		case SYS___getcwd:
+		err = sys__getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
+
+		case SYS_lseek:
+		pos = ((off_t)tf->tf_a2 << 32) | tf->tf_a3;
+		err = copyin((userptr_t)(tf->tf_sp+16), &whence, sizeof(int));
+		if (err) {
+			break;
+		}
+		err = sys_lseek(tf->tf_a0, pos, whence, &retval_high);
+		break;
+
 
 	    /* Add stuff here */
 
@@ -145,8 +166,16 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		tf->tf_v0 = retval;
-		tf->tf_a3 = 0;      /* signal no error */
+		tf->tf_a3 = 0;       /* signal no error */
+
+		if(callno == SYS_lseek){
+			tf->tf_v0 = (int)(retval_high >> 32);          // high bits
+			tf->tf_v1 = (int)(retval_high & 0xffffffff);   // low bits
+		}
+		else{
+			tf->tf_v0 = retval;  
+		}
+		   
 	}
 
 	/*

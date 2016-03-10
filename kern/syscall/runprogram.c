@@ -79,6 +79,8 @@ runprogram(char *progname)
 	proc_setas(as);
 	as_activate();
 
+	
+
 	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
 	if (result) {
@@ -89,6 +91,12 @@ runprogram(char *progname)
 
 	/* Done with the file now. */
 	vfs_close(v);
+
+	result = initial_ftable();
+	if(result){
+		panic("Failed at initial_ftable\n");
+		return result;
+	}
 
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
