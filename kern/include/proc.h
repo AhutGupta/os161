@@ -81,7 +81,7 @@ struct pidinfo{
 	int exitcode;
 	struct semaphore* exitsem;
 	struct thread* self;
-} *myStruct[32767];
+} *myStruct[512];
 
 // int pi_pid;			// process id of this thread
 // 	int pi_ppid;			// process id of parent thread
