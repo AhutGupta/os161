@@ -84,7 +84,7 @@ int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval){
 	size_t name_len;
 	
 	//Stat struct for getting the size of the file. (VOP_STAT)
-	struct stat *file_stat = (struct stat*) kmalloc(sizeof(struct stat*));
+	struct stat file_stat;
 
 	result = copyinstr((const_userptr_t) filename, name, PATH_MAX, &name_len);
 	if(result) {
@@ -125,10 +125,10 @@ int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval){
 	curthread->file_table[fd]->flags = flags;
 	
 	if(flags==O_APPEND){
-		int stat_err = VOP_STAT(fileobject, file_stat);
+		int stat_err = VOP_STAT(fileobject, &file_stat);
 		if(stat_err)
 			return stat_err;
-		curthread->file_table[fd]->offset = file_stat->st_size;
+		curthread->file_table[fd]->offset = file_stat.st_size;
 	}
 	
 	else
@@ -168,7 +168,7 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
 	struct iovec iov;
 	struct uio u;
-	void *mem_buf = (void *) kmalloc(buflen);
+	void *mem_buf[buflen];
 	int result;
 
 	if(fd<0 || fd>OPEN_MAX || curthread->file_table[fd] == NULL || curthread->file_table[fd]->flags == O_WRONLY){
@@ -185,14 +185,19 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
 	lock_acquire(curthread->file_table[fd]->filelock);
 
-	uio_kinit(&iov, &u, buf, buflen, curthread->file_table[fd]->offset, UIO_READ);
+	iov.iov_ubase = (userptr_t) buf;
+	iov.iov_len = buflen;
+	u.uio_iov = &iov;
+	u.uio_iovcnt = 1;
+	u.uio_offset = curthread->file_table[fd]->offset;
+	u.uio_resid = buflen;
+	u.uio_rw = UIO_READ;
 	u.uio_segflg = UIO_USERSPACE;
-	u.uio_space = curthread->t_proc->p_addrspace;
+	u.uio_space = curthread->t_proc->p_addrspace;	
 
 	result = VOP_READ(curthread->file_table[fd]->vnode, &u);
 	if(result){
 		kprintf("Error during read\n");
-		kfree(mem_buf);
 		lock_release(curthread->file_table[fd]->filelock);
 		return EIO;
 	}
@@ -200,7 +205,6 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 	*retval = buflen-u.uio_resid;
 	curthread->file_table[fd]->offset = u.uio_offset;
 
-	kfree(mem_buf);
 	lock_release(curthread->file_table[fd]->filelock);
 	return 0;
 
@@ -210,7 +214,7 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 
 	struct iovec iov;
 	struct uio u;
-	void *mem_buf = (void *) kmalloc(nbytes);
+	void *mem_buf[nbytes];
 	int result;
 
 	if(fd<0 || fd>OPEN_MAX || curthread->file_table[fd] == NULL || curthread->file_table[fd]->flags == O_RDONLY){
@@ -230,7 +234,14 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 
 	lock_acquire(curthread->file_table[fd]->filelock);
 
-	uio_kinit(&iov, &u, (void *) buf, nbytes, curthread->file_table[fd]->offset, UIO_WRITE);
+	//uio_kinit(&iov, &u, (void *) buf, nbytes, curthread->file_table[fd]->offset, UIO_WRITE);
+	iov.iov_ubase = (userptr_t) buf;
+	iov.iov_len = nbytes;
+	u.uio_iov = &iov;
+	u.uio_iovcnt = 1;
+	u.uio_offset = curthread->file_table[fd]->offset;
+	u.uio_resid = nbytes;
+	u.uio_rw = UIO_WRITE;
 	u.uio_segflg = UIO_USERSPACE;
 	u.uio_space = curthread->t_proc->p_addrspace;	
 
@@ -246,7 +257,6 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 	result = VOP_WRITE(curthread->file_table[fd]->vnode, &u);
 	if(result){
 		kprintf("Error during write\n");
-		kfree(mem_buf);
 		lock_release(curthread->file_table[fd]->filelock);
 		return EIO;
 	}
@@ -254,7 +264,6 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 	*retval = nbytes-u.uio_resid;
 	curthread->file_table[fd]->offset = u.uio_offset;
 
-	kfree(mem_buf);
 	lock_release(curthread->file_table[fd]->filelock);
 	return 0;
 }
@@ -271,8 +280,8 @@ int sys_lseek(int fd, off_t pos, int whence, off_t *retval_high){
 		return EBADF;
 	}
 
-	if(VOP_ISSEEKABLE(curthread->file_table[fd]->vnode)){
-		kprintf("Seek not allowed on console..\n");
+	if(!(VOP_ISSEEKABLE(curthread->file_table[fd]->vnode))){
+		kprintf("Seek not allowed on this file..\n");
 		return ESPIPE;
 	}
 
