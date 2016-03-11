@@ -29,6 +29,7 @@
 
 #ifndef _PROC_H_
 #define _PROC_H_
+#define INVALID_PID	0
 
 /*
  * Definition of a process.
@@ -73,6 +74,22 @@ struct proc {
 	/* add more material here as needed */
 };
 
+struct pidinfo{
+	pid_t pid;
+    pid_t ppid;
+	bool exited;
+	int exitcode;
+	struct semaphore* exitsem;
+	struct thread* self;
+} *myStruct[32767];
+
+// int pi_pid;			// process id of this thread
+// 	int pi_ppid;			// process id of parent thread
+// 	volatile int pi_exited;		// true if thread has exited
+// 	int pi_exitstatus;		// status (only valid if exited)
+// 	struct cv *pi_cv;
+
+
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
@@ -97,5 +114,7 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
+/* Process ID Allocation */
+pid_t pid_alloc(void);
 
 #endif /* _PROC_H_ */

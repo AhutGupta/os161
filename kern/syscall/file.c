@@ -20,6 +20,7 @@
 #include <uio.h>
 #include <proc.h>
 #include <syscall.h>
+#include <trapframe.h>
 
 
 int initial_ftable(void){
@@ -84,7 +85,6 @@ int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval){
 	
 	//Stat struct for getting the size of the file. (VOP_STAT)
 	struct stat *file_stat = (struct stat*) kmalloc(sizeof(struct stat*));
-	
 
 	result = copyinstr((const_userptr_t) filename, name, PATH_MAX, &name_len);
 	if(result) {
@@ -372,5 +372,64 @@ int sys__getcwd(char *buf, size_t buflen, int *retval){
 
     return result;
  }
+
+pid_t getpid(){
+
+	return curthread -> t_pid;
+}
+
+/*
+ * sys_fork
+ * 
+ * create a new process, which begins executing in child_thread().
+ */
+
+static
+void
+child_thread(void *vtf, unsigned long junk)
+{
+	struct trapframe mytf;
+	struct trapframe *ntf = vtf;
+
+	(void)junk;
+
+	
+	 // * Now copy the trapframe to our stack, so we can free the one
+	 // * that was malloced and use the one on our stack for going to
+	 // * userspace.
+	 
+
+	mytf = *ntf;
+	kfree(ntf);
+
+	enter_forked_process(&mytf);
+}
+
+pid_t fork(){
+	
+	struct trapframe *ntf;
+	int result;
+
+	// ntf = (trapframe *)kmalloc(sizeof(trapframe));
+	ntf = kmalloc(sizeof(struct trapframe));
+
+	if (ntf == NULL) {
+		return ENOMEM;
+	}
+
+	result = thread_fork(curthread->t_name, curproc, child_thread, ntf, 0);
+	// result = 1;
+
+	if (result) {
+		kfree(ntf);
+		return result;
+	}
+
+	// return curthread -> t_pid;
+	// return curproc -> t_pid;
+	return 0;
+}
+
+
 
 

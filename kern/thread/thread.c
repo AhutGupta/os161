@@ -153,8 +153,12 @@ thread_create(const char *name)
 		thread->file_table[i] = NULL;
 	}
 
+	// thread->t_pid = pid_alloc();
+
 	return thread;
 }
+
+
 
 /*
  * Create a CPU structure. This is used for the bootup CPU and

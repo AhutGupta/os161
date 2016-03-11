@@ -449,7 +449,3 @@ void rwlock_release_write(struct rwlock *rwlock){
 	cv_signal(rwlock->cv_read, rwlock->r_lock);
 	lock_release(rwlock->r_lock);
 }
-
-
-
-

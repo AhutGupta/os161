@@ -114,4 +114,3 @@ runprogram(char *progname)
 	panic("enter_new_process returned\n");
 	return EINVAL;
 }
-

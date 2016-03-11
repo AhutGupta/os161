@@ -86,6 +86,7 @@ syscall(struct trapframe *tf)
 	off_t pos, retval_high;
 	int err;
 
+
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
 	KASSERT(curthread->t_iplhigh_count == 0);
@@ -145,6 +146,27 @@ syscall(struct trapframe *tf)
 		err = sys_lseek(tf->tf_a0, pos, whence, &retval_high);
 		break;
 
+		// case SYS_getpid:
+		case SYS_getpid:
+		err = getpid();
+		break;
+
+		// case SYS_fork:
+		case SYS_fork:
+      	err = fork();
+      	break;
+
+      	// case SYS_waitpid:
+      	// err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
+      	// break;
+
+      	// case SYS__exit:
+      	// sys__exit(tf->tf_a0);
+      	// panic("Returning From Exit Command\n");
+
+      	// case SYS_execv:
+      	// err = sys_execv((userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1);
+      	// break;
 
 	    /* Add stuff here */
 
@@ -173,7 +195,7 @@ syscall(struct trapframe *tf)
 			tf->tf_v1 = (int)(retval_high & 0xffffffff);   // low bits
 		}
 		else{
-			tf->tf_v0 = retval;  
+			tf->tf_v0 = retval;
 		}
 		   
 	}

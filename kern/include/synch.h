@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
- *	The President and Fellows of Harvard College.
+ *      The President and Fellows of Harvard College.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,10 +44,10 @@
  * internally.
  */
 struct semaphore {
-	char *sem_name;
-	struct wchan *sem_wchan;
-	struct spinlock sem_lock;
-	volatile unsigned sem_count;
+        char *sem_name;
+        struct wchan *sem_wchan;
+        struct spinlock sem_lock;
+        volatile unsigned sem_count;
 };
 
 struct semaphore *sem_create(const char *name, unsigned initial_count);
@@ -62,6 +62,10 @@ void sem_destroy(struct semaphore *);
 void P(struct semaphore *);
 void V(struct semaphore *);
 
+struct maleSemaphore
+{
+
+};
 
 /*
  * Simple lock for mutual exclusion.

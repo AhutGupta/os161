@@ -74,6 +74,12 @@ int sys_lseek(int fd, off_t pos, int whence, off_t *retval_high);
 int sys_chdir(const char *pathname);
 int sys__getcwd(char *buf, size_t buflen, int *retval);
 
+pid_t getpid(void);
+pid_t fork(void);
+// int execv(const char *program, char **args);
+// int execve(const char *program, char **args, char **environ);
+// pid_t waitpid(pid_t pid, int *status, int options);
+
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 

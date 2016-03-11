@@ -121,6 +121,10 @@ struct thread {
 
 	/* Filetable */
 	struct file_handle *file_table[OPEN_MAX];
+
+	/* PID Management */
+	// pint t_pid;
+	pid_t t_pid;
 };
 
 /*

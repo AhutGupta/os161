@@ -39,17 +39,38 @@
 #include <proc.h>
 #include <vfs.h>
 #include <sfs.h>
+// #include <synch.h>
 #include <syscall.h>
 #include <test.h>
 #include <prompt.h>
-#include "opt-sfs.h"
+// #include "opt-sfs.h"
 #include "opt-net.h"
 #include "opt-synchprobs.h"
 #include "opt-automationtest.h"
 
+/* BEGIN A4 SETUP */
+/* Needed to include optional sfs code */
+#include "opt-sfs.h"
+
+#if OPT_SFS
+#include <sfs.h>
+#endif
+
+/* Hacky semaphore solution to make menu thread wait for command
+ * thread, in absence of thread_join solution.
+ */
+#include <synch.h>
+#include <current.h>
+struct semaphore *cmd_sem;
+int progthread_pid;
+
+/* END A4 SETUP */
+
 /*
  * In-kernel menu and command dispatcher.
  */
+
+struct semaphore *sem;
 
 #define _PATH_SHELL "/bin/sh"
 
@@ -78,6 +99,13 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	char progname[128];
 	int result;
 
+	/* BEGIN A4 SETUP */
+	/* Record pid of progthread, so only this thread will do a V()
+	 * on the semaphore when it exits.
+	 */
+	progthread_pid = curthread->t_pid;
+	/* END A4 SETUP */
+
 	KASSERT(nargs >= 1);
 
 	if (nargs > 2) {
@@ -95,6 +123,7 @@ cmd_progthread(void *ptr, unsigned long nargs)
 			strerror(result));
 		return;
 	}
+	V(cmd_sem);
 
 	/* NOTREACHED: runprogram only returns on error. */
 }
@@ -124,20 +153,27 @@ common_prog(int nargs, char **args)
 		return ENOMEM;
 	}
 
+	// P(cmd_sem);
+	
 	result = thread_fork(args[0] /* thread name */,
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
+	
+	
+
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
 		return result;
 	}
+	
 
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
 	 */
+	P(cmd_sem);
 
 	return 0;
 }
@@ -805,6 +841,12 @@ menu(char *args)
 {
 	char buf[64];
 
+	cmd_sem = sem_create("cmdsem", 0);
+	if (cmd_sem == NULL) {
+		panic("menu: could not create cmd_sem\n");
+	}
+	// V(cmd_sem);
+
 	menu_execute(args, 1);
 
 	while (1) {
@@ -816,4 +858,5 @@ menu(char *args)
 		kgets(buf, sizeof(buf));
 		menu_execute(buf, 0);
 	}
+
 }

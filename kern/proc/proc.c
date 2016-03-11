@@ -48,11 +48,17 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <synch.h>
+#include <kern/errno.h>
+
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+static struct lock *pidlock;
+static pid_t nextpid;			// next candidate pid
+static int nprocs;			// number of allocated pids
 
 /*
  * Create a proc structure.
@@ -317,4 +323,103 @@ proc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+static
+struct pidinfo *
+pidinfo_create(pid_t pid, pid_t ppid)
+{
+	struct pidinfo *pi;
+
+	KASSERT(pid != INVALID_PID);
+
+	pi = kmalloc(sizeof(struct pidinfo));
+	if (pi==NULL) {
+		return NULL;
+	}
+
+	//pi->pi_cv = cv_create("pidinfo cv");
+	// if (pi->pi_cv == NULL) {
+	// 	kfree(pi);
+	// 	return NULL;
+	// }
+
+	pi->pid = pid;
+	pi->ppid = ppid;
+	pi->exited = false;
+	// pi->pi_exitstatus = 0xbeef;  /* Recognizably invalid value */
+
+	return pi;
+}
+
+static
+void
+inc_nextpid(void)
+{
+	KASSERT(lock_do_i_hold(pidlock));
+
+	nextpid++;
+	if (nextpid > __PID_MAX) {
+		nextpid = __PID_MIN;
+	}
+}
+
+static void pi_put(pid_t pid, struct pidinfo *pi)
+{
+	KASSERT(lock_do_i_hold(pidlock));
+
+	KASSERT(pid != INVALID_PID);
+
+	KASSERT(myStruct[pid % __PID_MAX] == NULL);
+	myStruct[pid % __PID_MAX] = pi;
+	nprocs++;
+}
+
+pid_t pid_alloc()
+{
+	struct pidinfo *pi;
+	pid_t pid;
+	int count;
+
+	KASSERT(curthread->t_pid != INVALID_PID);
+
+	/* lock the table */
+	lock_acquire(pidlock);
+
+	if (nprocs == __PID_MAX) {
+		lock_release(pidlock);
+		return EAGAIN;
+	}
+
+	
+	 // * The above test guarantees that this loop terminates, unless
+	 // * our nprocs count is off. Even so, assert we aren't looping
+	 // * forever.
+	 
+	count = 0;
+	while (myStruct[nextpid % __PID_MAX] != NULL) {
+
+		/* avoid various boundary cases by allowing extra loops */
+		KASSERT(count < __PID_MAX*2+5);
+		count++;
+
+		inc_nextpid();
+	}
+
+	pid = nextpid;
+
+	pi = pidinfo_create(pid, curthread->t_pid);
+	if (pi==NULL) {
+		lock_release(pidlock);
+		return ENOMEM;
+	}
+
+	pi_put(pid, pi);
+
+	inc_nextpid();
+
+	lock_release(pidlock);
+
+	//*retval = pid;
+	return pid;
 }
