@@ -146,6 +146,10 @@ syscall(struct trapframe *tf)
 		err = sys_lseek(tf->tf_a0, pos, whence, &retval_high);
 		break;
 
+		case SYS_dup2:
+		err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+		break;
+
 		// case SYS_getpid:
 		case SYS_getpid:
 		err = getpid();
@@ -153,7 +157,11 @@ syscall(struct trapframe *tf)
 
 		// case SYS_fork:
 		case SYS_fork:
-      	err = fork();
+		err = sys_fork(tf,&retval);
+		break;
+
+      	case SYS_waitpid:
+      	err = waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
       	break;
 
       	// case SYS_waitpid:

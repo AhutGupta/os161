@@ -526,6 +526,16 @@ thread_fork(const char *name,
 	/* Thread subsystem fields */
 	newthread->t_cpu = curthread->t_cpu;
 
+	//Copy the File table
+	for(int i=0 ;i<OPEN_MAX;i++){ 
+		if(curthread->file_table[i]!=NULL){
+			curthread->file_table[i]->ref_count++;
+			newthread->file_table[i] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
+			memcpy(newthread->file_table[i], curthread->file_table[i], sizeof(struct file_handle*));
+		}
+	}
+
+
 	/* Attach the new thread to its process */
 	if (proc == NULL) {
 		proc = curthread->t_proc;
@@ -549,6 +559,7 @@ thread_fork(const char *name,
 
 	/* Lock the current cpu's run queue and make the new thread runnable */
 	thread_make_runnable(newthread, false);
+
 
 	return 0;
 }

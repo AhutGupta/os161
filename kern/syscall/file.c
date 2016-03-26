@@ -21,6 +21,7 @@
 #include <proc.h>
 #include <syscall.h>
 #include <trapframe.h>
+#include <addrspace.h>
 
 
 int initial_ftable(void){
@@ -387,56 +388,112 @@ pid_t getpid(){
 	return curthread -> t_pid;
 }
 
-/*
- * sys_fork
- * 
- * create a new process, which begins executing in child_thread().
- */
+int sys_dup2(int oldfd, int newfd, int *retval){
 
-static
-void
-child_thread(void *vtf, unsigned long junk)
-{
-	struct trapframe mytf;
-	struct trapframe *ntf = vtf;
-
-	(void)junk;
-
-	
-	 // * Now copy the trapframe to our stack, so we can free the one
-	 // * that was malloced and use the one on our stack for going to
-	 // * userspace.
-	 
-
-	mytf = *ntf;
-	kfree(ntf);
-
-	enter_forked_process(&mytf);
-}
-
-pid_t fork(){
-	
-	struct trapframe *ntf;
 	int result;
 
-	// ntf = (trapframe *)kmalloc(sizeof(trapframe));
-	ntf = kmalloc(sizeof(struct trapframe));
+	if(oldfd < 0 || newfd < 0 ){
+		return EBADF;
+	}
 
-	if (ntf == NULL) {
+	if(oldfd > OPEN_MAX || newfd > OPEN_MAX){
+		return  EMFILE;
+	}
+
+	lock_acquire(curthread->file_table[oldfd]->filelock);
+
+	if(curthread->file_table[newfd] != NULL) {
+		result = sys_close(newfd, retval);
+		if(result) {
+			kprintf("dup2 - sys_close failed!!\n");
+			return -1;
+		}
+	}
+	else {
+		curthread->file_table[newfd] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
+	}
+
+
+	curthread->file_table[newfd]->flags = curthread->file_table[oldfd]->flags;
+	curthread->file_table[newfd]->offset = curthread->file_table[oldfd]->offset;
+	curthread->file_table[newfd]->ref_count = curthread->file_table[oldfd]->ref_count;
+	curthread->file_table[newfd]->filelock = curthread->file_table[oldfd]->filelock;
+	curthread->file_table[newfd]->vnode = curthread->file_table[oldfd]->vnode;
+
+	*retval = newfd;
+	return 0;
+
+}
+
+void child_forkentry(void* c_tf, unsigned long c_addrspace) { 
+
+	struct trapframe *new_tf;
+	struct addrspace * new_addrspace;
+
+	new_tf = (struct trapframe *) c_tf;
+	new_addrspace = (struct addrspace *) c_addrspace;
+
+	new_tf->tf_a3 = 0;
+	new_tf->tf_v0 = 0;
+	new_tf->tf_epc += 4;
+
+	curthread->t_proc->p_addrspace = new_addrspace;
+	as_activate();
+
+	struct trapframe tf_new = *new_tf;
+	mips_usermode(&tf_new);
+}
+
+pid_t sys_fork(struct trapframe *parent_tf, int *retval){
+	
+	struct addrspace *child_addrspace;
+	int result;
+	const char *child = "child thread";
+	struct proc *child_proc = (struct proc *) kmalloc(sizeof(struct proc*));
+	struct trapframe *child_tf = kmalloc(sizeof(struct trapframe*));
+	
+	if(child_proc == NULL){
+		kfree(child_tf);
+		return ENOMEM;
+	}
+	if(child_tf == NULL){
+		kfree(child_proc);
 		return ENOMEM;
 	}
 
-	result = thread_fork(curthread->t_name, curproc, child_thread, ntf, 0);
-	// result = 1;
-
+	child_tf = parent_tf;
+	result = as_copy(curthread->t_proc->p_addrspace, &child_addrspace);
 	if (result) {
-		kfree(ntf);
+		return ENOMEM;
+	}
+
+	result = thread_fork(child, child_proc, child_forkentry, (void *) child_tf, (unsigned long) child_addrspace);
+	if (result) {
+		kprintf("thread_fork failed.....\n");
+		return ENOMEM;
+	}
+
+	//Return child PID for parent
+	*retval = 1;
+
+	return 0;
+
+
+//.......................
+
+}
+
+pid_t waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval)
+{
+	int status; 
+	int result;
+
+	result = pid_wait(pid, &status, flags, retval);
+	if (result) {
 		return result;
 	}
 
-	// return curthread -> t_pid;
-	// return curproc -> t_pid;
-	return 0;
+	return copyout(&status, retstatus, sizeof(int));
 }
 
 

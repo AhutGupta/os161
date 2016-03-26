@@ -50,6 +50,7 @@
 #include <vnode.h>
 #include <synch.h>
 #include <kern/errno.h>
+#include <kern/wait.h>
 
 
 /*
@@ -325,9 +326,7 @@ proc_setas(struct addrspace *newas)
 	return oldas;
 }
 
-static
-struct pidinfo *
-pidinfo_create(pid_t pid, pid_t ppid)
+static struct pidinfo * pidinfo_create(pid_t pid, pid_t ppid)
 {
 	struct pidinfo *pi;
 
@@ -338,23 +337,14 @@ pidinfo_create(pid_t pid, pid_t ppid)
 		return NULL;
 	}
 
-	//pi->pi_cv = cv_create("pidinfo cv");
-	// if (pi->pi_cv == NULL) {
-	// 	kfree(pi);
-	// 	return NULL;
-	// }
-
 	pi->pid = pid;
 	pi->ppid = ppid;
 	pi->exited = false;
-	// pi->pi_exitstatus = 0xbeef;  /* Recognizably invalid value */
 
 	return pi;
 }
 
-static
-void
-inc_nextpid(void)
+static void inc_nextpid(void)
 {
 	KASSERT(lock_do_i_hold(pidlock));
 
@@ -391,15 +381,9 @@ pid_t pid_alloc()
 		return EAGAIN;
 	}
 
-	
-	 // * The above test guarantees that this loop terminates, unless
-	 // * our nprocs count is off. Even so, assert we aren't looping
-	 // * forever.
-	 
 	count = 0;
 	while (myStruct[nextpid % __PID_MAX] != NULL) {
 
-		/* avoid various boundary cases by allowing extra loops */
 		KASSERT(count < __PID_MAX*2+5);
 		count++;
 
@@ -415,11 +399,105 @@ pid_t pid_alloc()
 	}
 
 	pi_put(pid, pi);
-
 	inc_nextpid();
+	lock_release(pidlock);
+	return pid;
+}
+
+
+static void pidinfo_destroy(struct pidinfo *pi)
+{
+	KASSERT(pi->exited==true);
+	KASSERT(pi->ppid==INVALID_PID);
+	cv_destroy(pi->cv_process);
+	kfree(pi);
+}
+
+static void pi_drop(pid_t pid)
+{
+	struct pidinfo *pi;
+
+	KASSERT(lock_do_i_hold(pidlock));
+
+	pi = myStruct[pid % __PID_MAX];
+	KASSERT(pi != NULL);
+	KASSERT(pi->pid == pid);
+
+	pidinfo_destroy(pi);
+	myStruct[pid % __PID_MAX] = NULL;
+	nprocs--;
+}
+
+static struct pidinfo * pi_get(pid_t pid)
+{
+	struct pidinfo *pi;
+
+	KASSERT(pid>=0);
+	KASSERT(pid != INVALID_PID);
+	KASSERT(lock_do_i_hold(pidlock));
+
+	pi = myStruct[pid % __PID_MAX];
+	if (pi==NULL) {
+		return NULL;
+	}
+	if (pi->pid != pid) {
+		return NULL;
+	}
+	return pi;
+}
+
+int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret)
+{
+	struct pidinfo *them;
+
+	KASSERT(curthread->t_pid != INVALID_PID);
+
+	if (theirpid == curthread->t_pid) {
+		return EINVAL;
+	}
+	if (theirpid == INVALID_PID || theirpid<0) {
+		return EINVAL;
+	}
+	if (flags != 0 && flags != WNOHANG) {
+		return EINVAL;
+	}
+
+	lock_acquire(pidlock);
+
+	them = pi_get(theirpid);
+	if (them==NULL) {
+		lock_release(pidlock);
+		return ESRCH;
+	}
+
+	KASSERT(them->pid==theirpid);
+
+	if (them->ppid != curthread->t_pid) {
+		lock_release(pidlock);
+		return EPERM;
+	}
+
+	if (them->exited==false) {
+		if (flags==WNOHANG) {
+			lock_release(pidlock);
+			KASSERT(ret!=NULL);
+			*ret = 0;
+			return 0;
+		}
+		cv_wait(them->cv_process, pidlock);
+		KASSERT(them->exited==true);
+	}
+
+	if (status != NULL) {
+		*status = them->exitcode;
+	}
+	if (ret != NULL) {
+		*ret = theirpid;
+	}
+
+	them->ppid = 0;
+	pi_drop(them->pid);
 
 	lock_release(pidlock);
-
-	//*retval = pid;
-	return pid;
+	return 0;
 }

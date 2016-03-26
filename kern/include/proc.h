@@ -76,11 +76,12 @@ struct proc {
 
 struct pidinfo{
 	pid_t pid;
-    pid_t ppid;
+   	pid_t ppid;
 	bool exited;
 	int exitcode;
 	struct semaphore* exitsem;
 	struct thread* self;
+	struct cv *cv_process;
 } *myStruct[512];
 
 // int pi_pid;			// process id of this thread
@@ -116,5 +117,7 @@ struct addrspace *proc_setas(struct addrspace *);
 
 /* Process ID Allocation */
 pid_t pid_alloc(void);
+
+int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret);
 
 #endif /* _PROC_H_ */
