@@ -43,6 +43,7 @@
 #include <current.h>
 #include <synch.h>
 #include <vm.h>
+#include <machine/coremap.h>
 #include <mainbus.h>
 #include <vfs.h>
 #include <device.h>
@@ -50,6 +51,7 @@
 #include <test.h>
 #include <kern/test161.h>
 #include <version.h>
+ #include <coremap.h>
 #include "autoconf.h"  // for pseudoconfig
 
 
@@ -108,6 +110,7 @@ boot(void)
 
 	/* Early initialization. */
 	ram_bootstrap();
+	initializeCoremap();
 	proc_bootstrap();
 	thread_bootstrap();
 	hardclock_bootstrap();

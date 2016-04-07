@@ -323,6 +323,10 @@ file      ../common/libtest161/sha256.c
 #                                      #
 ########################################
 
+#Coremap 
+
+file 	  arch/mips/vm/coremap.c
+
 #
 # Thread system
 #

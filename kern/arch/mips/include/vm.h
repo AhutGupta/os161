@@ -116,6 +116,29 @@ paddr_t ram_getfirstfree(void);
  * We'll take up to 16 invalidations before just flushing the whole TLB.
  */
 
+/*struct coremap_entry{
+	struct page_struct *page;
+	unsigned int cpu_index : 4;
+	int tlb_index : 7;
+	int block_length : 4;
+	bool is_allocated : 1;
+	bool is_pinned : 1;
+
+};
+
+struct page_struct{
+	paddr_t ps_padder;
+	off_t ps_swapaddr;
+	struct spinlock ps_spinlock;
+};
+
+void initializeCoremap(void);
+
+vaddr_t alloc_kpages(unsigned npages);
+void free_kpages(vaddr_t addr);
+*/
+
+
 struct tlbshootdown {
 	/*
 	 * Change this to what you need for your VM design.
