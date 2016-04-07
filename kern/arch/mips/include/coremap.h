@@ -15,10 +15,8 @@ struct coremap_entry{
 struct page_struct{
 	paddr_t ps_padder;
 	off_t ps_swapaddr;
-	struct spinlock ps_spinlock;
+	struct spinlock *ps_spinlock;
 };
-
-static struct coremap_entry **coremap;
 
 void initializeCoremap(void);
 
