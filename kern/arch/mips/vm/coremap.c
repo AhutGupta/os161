@@ -51,7 +51,6 @@ void initializeCoremap(void){
 
 vaddr_t alloc_kpages(unsigned npages){
 	unsigned page_count = 0;
-	//bool palloc = false;
 	for(unsigned i = 0; i<sizeofmap; i++){
 		if(coremap[i].is_allocated)
 			page_count = 0;
@@ -60,11 +59,11 @@ vaddr_t alloc_kpages(unsigned npages){
 		if(page_count == npages){
 			int start_index = i+1-npages;
 			spinlock_acquire(core_lock);
-			//palloc = true;
 			coremap[start_index].block_length = npages;
 			for(unsigned j = start_index; j<=i; j++){
 				coremap[j].is_allocated = 1;
 			}
+			//kprintf("Allocating index: %d, for: %u pages\n",start_index, npages);
 			spinlock_release(core_lock);
 			vaddr_t returnaddr = PADDR_TO_KVADDR(coremap[start_index].ps_padder);
 			return returnaddr;
@@ -75,18 +74,17 @@ vaddr_t alloc_kpages(unsigned npages){
 void free_kpages(vaddr_t addr){
 	paddr_t page_ad = KVADDR_TO_PADDR(addr);
 	unsigned i=0;
-	kprintf("Buffer...\n");
 	for (i=0; i<sizeofmap; i++){
 		if(coremap[i].ps_padder == page_ad)
 			break;
 	}
 	KASSERT(coremap[i].is_allocated);
-	int j = i;
+	int j = coremap[i].block_length;
 	spinlock_acquire(core_lock);
-	while(j<coremap[i].block_length){
-		coremap[j].is_allocated = 0;
-		coremap[j].block_length = 0;
-		j++;
+	for(int k=0; k<j; k++){
+		coremap[i+k].is_allocated = 0;
+		coremap[i+k].block_length = 0;
+		//kprintf("Freeing index: %d\n", (i+k));
 	}
 	spinlock_release(core_lock);
 
@@ -108,6 +106,7 @@ coremap_used_bytes() {
 			count++;
 		}
 	}
+	//kprintf("No. of used pages: %d. Total pages: %u\n", count, sizeofmap);
 	unsigned int used = count*PAGE_SIZE;
 
 	return used;
