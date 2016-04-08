@@ -102,9 +102,15 @@ unsigned
 int
 coremap_used_bytes() {
 
-	/* Not yet */
+	unsigned i = 0, count = 0;
+	
+	for(i =0; i<sizeofmap; ++i){
+		if(coremap[i].is_allocated == 1){
+			++count;
+		}
+	}
 
-	return 0;
+	return count * PAGE_SIZE;
 }
 
 void
