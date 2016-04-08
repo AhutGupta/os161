@@ -144,6 +144,7 @@ kmallocstress(int nargs, char **args)
 		result = thread_fork("kmallocstress", NULL,
 				     kmallocthread, sem, i);
 		if (result) {
+			kprintf("thread_fork failed\n");
 			panic("kmallocstress: thread_fork failed: %s\n",
 			      strerror(result));
 		}
