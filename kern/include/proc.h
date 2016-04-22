@@ -30,6 +30,7 @@
 #ifndef _PROC_H_
 #define _PROC_H_
 #define INVALID_PID	0
+#define MAX_PROC 256
 
 /*
  * Definition of a process.
@@ -81,13 +82,14 @@ struct proc {
 };
 // } *myStruct[512];
 
-struct proc_table{
-	struct proc *proc;
-	struct proc_table *next;
-	pid_t pid;
-};
+//struct proc_table_entry{
+//	struct proc *proc;
+	//struct proc_table *next;
+	//pid_t pid;
+//};
+extern struct lock* proc_lock;
 
-extern struct proc_table *proc_table;
+struct proc *proc_table[MAX_PROC];
 
 // struct pidinfo{
 // 	pid_t pid;

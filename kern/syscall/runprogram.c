@@ -92,6 +92,8 @@ runprogram(char *progname)
 	/* Done with the file now. */
 	vfs_close(v);
 
+	curproc->pid = PID_MIN;
+
 	result = initial_ftable();
 	if(result){
 		panic("Failed at initial_ftable\n");
