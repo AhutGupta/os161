@@ -558,7 +558,7 @@ void sys_exit(int exitcode){
 
 		while(temporary != NULL){
 			kprintf("Inside For loop. PID: %d", temporary->pid);
-			if(temporary->pid == curproc->pid){
+			if(temporary->proc->pid == curproc->pid){
 				break;
 			}
 			temporary = temporary->next;
