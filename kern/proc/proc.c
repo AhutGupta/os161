@@ -57,14 +57,24 @@
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
-static struct lock *pidlock;
-static pid_t nextpid;			// next candidate pid
-static int nprocs;			// number of allocated pids
+
+struct proc_table *proc_table = NULL;
+int count_proc;
+
+pid_t givepid(void) {
+	// if(proc_table == NULL){
+	// 	count_proc = 1;
+	// 	proc_table = (struct proc_table *)kmalloc(sizeof(struct proc_table));
+	// 	proc_table->next = NULL;
+	// 	proc_table->pid = 1;
+	// 	proc_table->proc = (struct proc *) kmalloc(sizeof(struct proc));
+	// }
+return ++count_proc;
+}
 
 /*
  * Create a proc structure.
  */
-static
 struct proc *
 proc_create(const char *name)
 {
@@ -89,6 +99,37 @@ proc_create(const char *name)
 	/* VFS fields */
 	proc->p_cwd = NULL;
 
+	proc->ppid = 0;
+	proc->exited = false;
+	proc->exitcode = 0;
+	proc->self = curthread;
+
+	struct semaphore *sem;
+	sem = sem_create("child", 0);
+	proc->exitsem = sem;
+
+	struct proc_table *temporary;
+
+	if(proc_table == NULL){
+		count_proc = 1;
+		proc_table = (struct proc_table *)kmalloc(sizeof(struct proc_table));
+		proc_table->next = NULL;
+		proc->pid = count_proc;
+		proc_table->pid = proc->pid;
+		proc_table->proc = proc;
+	} else {
+		for(temporary=proc_table; temporary->next!= NULL; temporary=temporary->next);
+			temporary->next = (struct proc_table *)kmalloc(sizeof(struct proc_table));
+			temporary->next->next = NULL;
+			proc->ppid = curproc->pid;
+			proc->pid = givepid();
+			temporary->next->proc = proc;
+			temporary->next->pid = proc->pid;
+		if(temporary->next->pid > PID_MAX) {
+			return NULL;
+		}
+	}
+
 	return proc;
 }
 
@@ -111,6 +152,15 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
+
+	pid_t pid;
+	pid = curproc->pid;
+	struct proc_table *demo, *temporary;
+	for(demo = proc_table; demo->next->pid != pid; demo=demo->next);
+		temporary = demo->next;
+		demo->next = demo->next->next;
+	kfree(temporary->proc);
+	kfree(temporary);
 
 	/*
 	 * We don't take p_lock in here because we must have the only
@@ -326,178 +376,194 @@ proc_setas(struct addrspace *newas)
 	return oldas;
 }
 
-static struct pidinfo * pidinfo_create(pid_t pid, pid_t ppid)
-{
-	struct pidinfo *pi;
 
-	KASSERT(pid != INVALID_PID);
-
-	pi = kmalloc(sizeof(struct pidinfo));
-	if (pi==NULL) {
-		return NULL;
-	}
-
-	pi->pid = pid;
-	pi->ppid = ppid;
-	pi->exited = false;
-
-	return pi;
-}
-
-static void inc_nextpid(void)
-{
-	KASSERT(lock_do_i_hold(pidlock));
-
-	nextpid++;
-	if (nextpid > __PID_MAX) {
-		nextpid = __PID_MIN;
-	}
-}
-
-static void pi_put(pid_t pid, struct pidinfo *pi)
-{
-	KASSERT(lock_do_i_hold(pidlock));
-
-	KASSERT(pid != INVALID_PID);
-
-	KASSERT(myStruct[pid % __PID_MAX] == NULL);
-	myStruct[pid % __PID_MAX] = pi;
-	nprocs++;
-}
-
-pid_t pid_alloc()
-{
-	struct pidinfo *pi;
-	pid_t pid;
-	int count;
-
-	KASSERT(curthread->t_pid != INVALID_PID);
-
-	/* lock the table */
-	lock_acquire(pidlock);
-
-	if (nprocs == __PID_MAX) {
-		lock_release(pidlock);
-		return EAGAIN;
-	}
-
-	count = 0;
-	while (myStruct[nextpid % __PID_MAX] != NULL) {
-
-		KASSERT(count < __PID_MAX*2+5);
-		count++;
-
-		inc_nextpid();
-	}
-
-	pid = nextpid;
-
-	pi = pidinfo_create(pid, curthread->t_pid);
-	if (pi==NULL) {
-		lock_release(pidlock);
-		return ENOMEM;
-	}
-
-	pi_put(pid, pi);
-	inc_nextpid();
-	lock_release(pidlock);
-	return pid;
-}
+// Self
 
 
-static void pidinfo_destroy(struct pidinfo *pi)
-{
-	KASSERT(pi->exited==true);
-	KASSERT(pi->ppid==INVALID_PID);
-	cv_destroy(pi->cv_process);
-	kfree(pi);
-}
+// static struct pidinfo * pidinfo_create(pid_t pid, pid_t ppid)
+// {
+// 	struct pidinfo *pi;
 
-static void pi_drop(pid_t pid)
-{
-	struct pidinfo *pi;
+// 	KASSERT(pid != INVALID_PID);
 
-	KASSERT(lock_do_i_hold(pidlock));
+// 	pi = kmalloc(sizeof(struct pidinfo));
+// 	if (pi==NULL) {
+// 		return NULL;
+// 	}
 
-	pi = myStruct[pid % __PID_MAX];
-	KASSERT(pi != NULL);
-	KASSERT(pi->pid == pid);
+// 	pi->pid = pid;
+// 	pi->ppid = ppid;
+// 	pi->exited = false;
 
-	pidinfo_destroy(pi);
-	myStruct[pid % __PID_MAX] = NULL;
-	nprocs--;
-}
+// 	return pi;
+// }
 
-static struct pidinfo * pi_get(pid_t pid)
-{
-	struct pidinfo *pi;
+// static void inc_nextpid(void)
+// {
+// 	KASSERT(lock_do_i_hold(pidlock));
 
-	KASSERT(pid>=0);
-	KASSERT(pid != INVALID_PID);
-	KASSERT(lock_do_i_hold(pidlock));
+// 	nextpid++;
+// 	if (nextpid > __PID_MAX) {
+// 		nextpid = __PID_MIN;
+// 	}
+// }
 
-	pi = myStruct[pid % __PID_MAX];
-	if (pi==NULL) {
-		return NULL;
-	}
-	if (pi->pid != pid) {
-		return NULL;
-	}
-	return pi;
-}
+// static void pi_put(pid_t pid, struct pidinfo *pi)
+// {
+// 	KASSERT(lock_do_i_hold(pidlock));
 
-int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret)
-{
-	struct pidinfo *them;
+// 	KASSERT(pid != INVALID_PID);
 
-	KASSERT(curthread->t_pid != INVALID_PID);
+// 	KASSERT(myStruct[pid % __PID_MAX] == NULL);
+// 	myStruct[pid % __PID_MAX] = pi;
+// 	nprocs++;
+// }
 
-	if (theirpid == curthread->t_pid) {
-		return EINVAL;
-	}
-	if (theirpid == INVALID_PID || theirpid<0) {
-		return EINVAL;
-	}
-	if (flags != 0 && flags != WNOHANG) {
-		return EINVAL;
-	}
+// pid_t pid_alloc()
+// {
+// 	struct pidinfo *pi;
+// 	pid_t pid;
+// 	int count;
 
-	lock_acquire(pidlock);
+// 	KASSERT(curthread->t_pid != INVALID_PID);
 
-	them = pi_get(theirpid);
-	if (them==NULL) {
-		lock_release(pidlock);
-		return ESRCH;
-	}
+// 	/* lock the table */
+// 	lock_acquire(pidlock);
 
-	KASSERT(them->pid==theirpid);
+// 	if (nprocs == __PID_MAX) {
+// 		lock_release(pidlock);
+// 		return EAGAIN;
+// 	}
 
-	if (them->ppid != curthread->t_pid) {
-		lock_release(pidlock);
-		return EPERM;
-	}
+// 	count = 0;
+// 	while (myStruct[nextpid % __PID_MAX] != NULL) {
 
-	if (them->exited==false) {
-		if (flags==WNOHANG) {
-			lock_release(pidlock);
-			KASSERT(ret!=NULL);
-			*ret = 0;
-			return 0;
-		}
-		cv_wait(them->cv_process, pidlock);
-		KASSERT(them->exited==true);
-	}
+// 		KASSERT(count < __PID_MAX*2+5);
+// 		count++;
 
-	if (status != NULL) {
-		*status = them->exitcode;
-	}
-	if (ret != NULL) {
-		*ret = theirpid;
-	}
+// 		inc_nextpid();
+// 	}
 
-	them->ppid = 0;
-	pi_drop(them->pid);
+// 	pid = nextpid;
 
-	lock_release(pidlock);
-	return 0;
-}
+// 	pi = pidinfo_create(pid, curthread->t_pid);
+// 	if (pi==NULL) {
+// 		lock_release(pidlock);
+// 		return ENOMEM;
+// 	}
+
+// 	pi_put(pid, pi);
+// 	inc_nextpid();
+// 	lock_release(pidlock);
+// 	return pid;
+// }
+
+
+// static void pidinfo_destroy(struct pidinfo *pi)
+// {
+// 	KASSERT(pi->exited==true);
+// 	KASSERT(pi->ppid==INVALID_PID);
+// 	cv_destroy(pi->cv_process);
+// 	kfree(pi);
+// }
+
+// static void pi_drop(pid_t pid)
+// {
+// 	struct pidinfo *pi;
+
+// 	KASSERT(lock_do_i_hold(pidlock));
+
+// 	pi = myStruct[pid % __PID_MAX];
+// 	KASSERT(pi != NULL);
+// 	KASSERT(pi->pid == pid);
+
+// 	pidinfo_destroy(pi);
+// 	myStruct[pid % __PID_MAX] = NULL;
+// 	nprocs--;
+// }
+
+// static struct pidinfo * pi_get(pid_t pid)
+// {
+// 	struct pidinfo *pi;
+
+// 	KASSERT(pid>=0);
+// 	KASSERT(pid != INVALID_PID);
+// 	KASSERT(lock_do_i_hold(pidlock));
+
+// 	pi = myStruct[pid % __PID_MAX];
+// 	if (pi==NULL) {
+// 		return NULL;
+// 	}
+// 	if (pi->pid != pid) {
+// 		return NULL;
+// 	}
+// 	return pi;
+// }
+
+// int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret)
+// {
+// 	struct pidinfo *them;
+
+// 	KASSERT(curthread->t_pid != INVALID_PID);
+
+// 	if (theirpid == curthread->t_pid) {
+// 		return EINVAL;
+// 	}
+// 	if (theirpid == INVALID_PID || theirpid<0) {
+// 		return EINVAL;
+// 	}
+// 	if (flags != 0 && flags != WNOHANG) {
+// 		return EINVAL;
+// 	}
+
+// 	lock_acquire(pidlock);
+
+// 	them = pi_get(theirpid);
+// 	if (them==NULL) {
+// 		lock_release(pidlock);
+// 		return ESRCH;
+// 	}
+
+// 	KASSERT(them->pid==theirpid);
+
+// 	if (them->ppid != curthread->t_pid) {
+// 		lock_release(pidlock);
+// 		return EPERM;
+// 	}
+
+// 	if (them->exited==false) {
+// 		if (flags==WNOHANG) {
+// 			lock_release(pidlock);
+// 			KASSERT(ret!=NULL);
+// 			*ret = 0;
+// 			return 0;
+// 		}
+// 		cv_wait(them->cv_process, pidlock);
+// 		KASSERT(them->exited==true);
+// 	}
+
+// 	if (status != NULL) {
+// 		*status = them->exitcode;
+// 	}
+// 	if (ret != NULL) {
+// 		*ret = theirpid;
+// 	}
+
+// 	them->ppid = 0;
+// 	pi_drop(them->pid);
+
+// 	lock_release(pidlock);
+// 	return 0;
+// }
+
+
+// New Self
+
+// void destroy_process(pid_t pid) {
+// 	struct proc_table *demo, *temporary;
+// 	for(demo = proc_table; demo->next->pid != pid; demo=demo->next);
+// 		temporary = demo->next;
+// 		demo->next = demo->next->next;
+// 	kfree(temporary->proc);
+// 	kfree(temporary);
+// }

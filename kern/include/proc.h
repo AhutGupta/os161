@@ -72,24 +72,38 @@ struct proc {
 	struct vnode *p_cwd;		/* current working directory */
 
 	/* add more material here as needed */
-};
-
-struct pidinfo{
 	pid_t pid;
-   	pid_t ppid;
+	pid_t ppid;
 	bool exited;
 	int exitcode;
 	struct semaphore* exitsem;
 	struct thread* self;
-	struct cv *cv_process;
-} *myStruct[512];
+};
+// } *myStruct[512];
+
+struct proc_table{
+	struct proc *proc;
+	struct proc_table *next;
+	pid_t pid;
+};
+
+extern struct proc_table *proc_table;
+
+// struct pidinfo{
+// 	pid_t pid;
+//    	pid_t ppid;
+// 	bool exited;
+// 	int exitcode;
+// 	struct semaphore* exitsem;
+// 	struct thread* self;
+// 	struct cv *cv_process;
+// } *myStruct[512];
 
 // int pi_pid;			// process id of this thread
 // 	int pi_ppid;			// process id of parent thread
 // 	volatile int pi_exited;		// true if thread has exited
 // 	int pi_exitstatus;		// status (only valid if exited)
 // 	struct cv *pi_cv;
-
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
@@ -117,7 +131,16 @@ struct addrspace *proc_setas(struct addrspace *);
 
 /* Process ID Allocation */
 pid_t pid_alloc(void);
+pid_t givepid(void);
+struct proc * proc_create(const char *name);
 
-int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret);
+void entrypoint(void* data1, unsigned long data2);
+// pid_t sys_fork(struct trapframe *parent_tf, int *retval);
+// pid_t sys_fork(struct trapframe *tf, int *retval);
+// int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret);
+void sys_exit(int exitcode);
+void destroy_process(pid_t pid);
+pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval);
+int copyout(const void *src, userptr_t userdest, size_t len);
 
 #endif /* _PROC_H_ */

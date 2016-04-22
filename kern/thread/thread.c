@@ -149,12 +149,20 @@ thread_create(const char *name)
 
 	/* If you add to struct thread, be sure to initialize here */
 
+
 	//Initialize the File table
 	for(int i=0; i<OPEN_MAX; i++){
 		thread->file_table[i] = NULL;
 	}
 
 	// thread->t_pid = pid_alloc();
+	// thread->ppid = 2;
+	// pid_t id = givepid();
+
+	// if(id > PID_MAX){
+		// return NULL;
+	// }
+	// thread->t_pid = id;
 
 	return thread;
 }
@@ -527,13 +535,19 @@ thread_fork(const char *name,
 
 	/* Thread subsystem fields */
 	newthread->t_cpu = curthread->t_cpu;
+	const char *lockname = "Child_Ftable_lock";
 
 	//Copy the File table
 	for(int i=0 ;i<OPEN_MAX;i++){ 
 		if(curthread->file_table[i]!=NULL){
 			curthread->file_table[i]->ref_count++;
 			newthread->file_table[i] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
-			memcpy(newthread->file_table[i], curthread->file_table[i], sizeof(struct file_handle*));
+			//memcpy(newthread->file_table[i], curthread->file_table[i], sizeof(struct file_handle*));
+			newthread->file_table[i]->filelock = lock_create(lockname);
+			newthread->file_table[i]->flags = curthread->file_table[i]->flags;
+			newthread->file_table[i]->offset = curthread->file_table[i]->offset;
+			newthread->file_table[i]->ref_count = curthread->file_table[i]->ref_count;
+			newthread->file_table[i]->vnode = curthread->file_table[i]->vnode;
 		}
 	}
 
