@@ -33,6 +33,8 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <machine/tlb.h>
+#include <spl.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -53,6 +55,11 @@ as_create(void)
 	/*
 	 * Initialize as needed.
 	 */
+	as->pages=NULL;
+	as->regionlist=NULL;
+	as->heap_start=0;
+	as->heap_end=0;
+	as->loading=0;
 
 	return as;
 }
@@ -67,11 +74,48 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
+	//Copy the pagetable
+	struct pagetable_entry *pagelist = old->pages;
+	while(pagelist!=NULL){
+		struct pagetable_entry *newpage = kmalloc(sizeof(struct pagetable_entry));
+		newpage = pagelist;
+		newpage->next=NULL;
+		if(newas->pages==NULL){
+			newas->pages = newpage;
+		}
+		else{
+			struct pagetable_entry *page_pos = newas->pages;
+			while(page_pos->next!=NULL){
+				page_pos=page_pos->next;
+			}
+			page_pos->next = newpage;
+		}
+		pagelist=pagelist->next;
+	}
 
-	(void)old;
+	//Copy the regions
+	struct regions *region_list = old->regionlist;
+	while(region_list!=NULL){
+		struct regions *newregion = kmalloc(sizeof(struct regions));
+		newregion = region_list;
+		newregion->next=NULL;
+		if(newas->regionlist==NULL){
+			newas->regionlist = newregion;
+		}
+		else{
+			struct regions *reg_pos = newas->regionlist;
+			while(reg_pos->next!=NULL){
+				reg_pos=reg_pos->next;
+			}
+			reg_pos->next = newregion;
+		}
+		region_list=region_list->next;
+	}
+
+	//Copy stack and register
+	newas->heap_start = old->heap_start;
+	newas->heap_end = old->heap_end;
+	newas->loading = old->loading;
 
 	*ret = newas;
 	return 0;
@@ -80,9 +124,19 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
+	while(as->regionlist!=NULL){
+		free_kpages(as->regionlist->vbase);
+		struct regions *temp = as->regionlist;
+		kfree(temp);
+		as->regionlist = as->regionlist->next;
+	}
+
+	while(as->pages!=NULL){
+		free_kpages(as->pages->vaddr);
+		struct pagetable_entry *temp = as->pages;
+		kfree(temp);
+		as->pages = as->pages->next;
+	}
 
 	kfree(as);
 }
@@ -101,9 +155,13 @@ as_activate(void)
 		return;
 	}
 
-	/*
-	 * Write this.
-	 */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 void
@@ -133,14 +191,43 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	/*
 	 * Write this.
 	 */
+	size_t npages;
+	/* Align the region. First, the base... */
+	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
-	(void)readable;
-	(void)writeable;
-	(void)executable;
-	return ENOSYS;
+	/* ...and now the length. */
+	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
+
+	npages = memsize / PAGE_SIZE;
+
+	//Update heap start and end
+	if (as->heap_start < vaddr) {
+		as->heap_start = vaddr;
+		as->heap_end = vaddr+memsize;
+	}
+
+	struct regions *nextregion;
+	if(as->regionlist==NULL){
+		as->regionlist = kmalloc(sizeof(struct regions));
+		nextregion = as->regionlist;
+	}
+	else{
+		nextregion = as->regionlist;
+		while(nextregion->next!=NULL){
+			nextregion = nextregion->next;
+		}
+		nextregion->next = kmalloc(sizeof(struct regions));
+		nextregion = nextregion->next;
+	}
+
+	nextregion->vbase = vaddr;
+	nextregion->npages = npages;
+	nextregion->permissions[0] = readable;
+	nextregion->permissions[1] = writeable;
+	nextregion->permissions[3] = executable;
+	nextregion->next = NULL;
+	return 0;
 }
 
 int
@@ -150,7 +237,8 @@ as_prepare_load(struct addrspace *as)
 	 * Write this.
 	 */
 
-	(void)as;
+	//Set Loading to 1. Checked during vm_fault
+	as->loading = 1;
 	return 0;
 }
 
@@ -161,7 +249,7 @@ as_complete_load(struct addrspace *as)
 	 * Write this.
 	 */
 
-	(void)as;
+	as->loading=0;
 	return 0;
 }
 
@@ -179,4 +267,48 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	return 0;
 }
+
+struct pagetable_entry * get_pte(struct addrspace *as, vaddr_t vbase){
+	struct pagetable_entry *pte = as->pages;
+	if(pte==NULL)
+		return NULL;
+	
+	int v = (vbase>>12)&0xfffff;
+
+	while(pte!=NULL){
+		int page_v = pte->vaddr;
+		if(page_v == v){
+			return pte;
+		}
+
+		pte = pte->next;
+	}
+
+	return NULL;
+}
+
+void pte_insert(struct addrspace *as, vaddr_t vbase, vaddr_t pbase, bool perm[3]){
+	vaddr_t v = vbase>>12;
+	vaddr_t p = pbase>>12;
+	struct pagetable_entry *newpage = kmalloc(sizeof(struct pagetable_entry));
+	newpage->vaddr = v;
+	newpage->paddr = p;
+	for(int i=0; i<3; i++)
+		newpage->permissions[i] = perm[i];
+	newpage->next = NULL;
+
+	struct pagetable_entry* curr = as->pages;
+
+	if(curr==NULL){
+		as->pages = newpage;
+		return;
+	}
+	while(curr->next!=NULL)
+		curr=curr->next;
+
+	curr->next = newpage;
+	return;
+
+}
+
 

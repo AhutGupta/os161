@@ -23,6 +23,7 @@
 #include <trapframe.h>
 #include <addrspace.h>
 
+#define HEAP_MAX 0x40000000
 
 int initial_ftable(void){
 	struct vnode *vin, *vout, *verr;
@@ -496,6 +497,35 @@ pid_t waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval)
 	return copyout(&status, retstatus, sizeof(int));
 }
 
+int sbrk(intptr_t amount, int *retval){
+	struct addrspace *as = proc_getas();
+
+    if (amount == 0){
+    	*retval = as->heap_end;
+    	return 0;
+    }
+    else if(amount<0){
+    	if ((long)as->heap_end + (long)amount >= (long)as->heap_start) {
+            as->heap_end += amount;
+            *retval = as->heap_end;
+            return 0;
+        }
+    	*retval = -1;
+    	return EINVAL;
+    }
+    else{
+    	
+    	if ((as->heap_end+amount) < (USERSTACK-STACKPAGES * PAGE_SIZE) && (as->heap_end+amount) < (as->heap_start+HEAP_MAX)) {
+        *retval = as->heap_end;
+        as->heap_end += amount;
+        return 0;
+    	}
+
+    	*retval = -1;
+    	return ENOMEM;
+    }
+
+}
 
 
 

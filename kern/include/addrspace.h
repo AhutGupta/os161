@@ -39,6 +39,8 @@
 #include "opt-dumbvm.h"
 
 struct vnode;
+#define STACKPAGES 18
+
 
 
 /*
@@ -47,6 +49,20 @@ struct vnode;
  *
  * You write this.
  */
+struct regions {
+  vaddr_t vbase;
+  size_t npages;
+  //permissions: READ WRITE EXEC. In that order
+  bool permissions[3];
+  struct regions *next;
+};
+
+struct pagetable_entry{
+  int vaddr:20;
+  int paddr:20;
+  bool permissions[3];
+  struct pagetable_entry *next;
+};
 
 struct addrspace {
 #if OPT_DUMBVM
@@ -57,8 +73,12 @@ struct addrspace {
         paddr_t as_pbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
-#else
-        /* Put stuff here for your VM system */
+#else        
+        struct pagetable_entry *pages;
+        struct regions *regionlist;
+        vaddr_t heap_start;
+        vaddr_t heap_end;
+        bool loading:1;
 #endif
 };
 
@@ -117,7 +137,8 @@ int               as_define_region(struct addrspace *as,
 int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
-
+struct pagetable_entry * get_pte(struct addrspace *as, vaddr_t vbase);
+void pte_insert(struct addrspace *as, vaddr_t vbase, vaddr_t pbase, bool perm[3]);
 
 /*
  * Functions in loadelf.c

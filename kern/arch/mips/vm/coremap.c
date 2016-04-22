@@ -129,7 +129,96 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 }
 
 int vm_fault(int faulttype, vaddr_t faultaddress){
-	(void) faultaddress;
-	(void) faulttype;
+	
+	bool valid = false;
+	struct addrspace *as = proc_getas();
+	bool page_permission[3];
+	uint32_t tlbhi, tlblo;
+
+	if (as == NULL)
+		return EFAULT;
+	faultaddress &= PAGE_FRAME;
+	
+	//Check if the address is valid
+	struct regions *curr_region = as->regionlist;
+	while(curr_region!=NULL){
+		if(faultaddress>=curr_region->vbase && faultaddress<=(curr_region->vbase+curr_region->npages*PAGE_SIZE)){
+			valid = true;
+			for(int i=0; i<3; i++)
+				page_permission[i] = curr_region->permissions+i;
+			break;
+		}
+		curr_region=curr_region->next;
+	}
+	if (faultaddress >= USERSTACK - PAGE_SIZE * STACKPAGES){
+		page_permission[0] = 1;
+		page_permission[1] = 1;
+		valid = true;
+	}
+
+	if(!valid)
+		return EFAULT;
+
+	struct pagetable_entry *pte = get_pte(as, faultaddress);
+
+	//Check if we have the required permission
+	int spl = splhigh();
+
+	switch(faulttype){
+		case VM_FAULT_READONLY:
+			//Check if we can write to the page
+			if(!page_permission[1] || !as->loading){
+				return EFAULT;
+			}
+
+			//Set the entries to be written to TLB
+			vaddr_t pbase = pte->paddr<<12;
+//////////////////////////////////////////////////////////////////////////////////// pbase type
+			tlbhi = faultaddress & TLBHI_VPAGE;
+			tlblo = (pbase & TLBLO_PPAGE) | TLBLO_DIRTY | TLBLO_VALID;
+
+			//Get the tlb index for the page
+			int tlb_index = tlb_probe(faultaddress, 0);
+			if (tlb_index < 0) {
+				tlb_random(tlbhi, tlblo);
+			}
+			else {
+				tlb_write(tlbhi, tlblo, tlb_index);
+			}
+
+			splx(spl);
+			return 0;
+
+		case VM_FAULT_WRITE: break;
+		case VM_FAULT_READ: break;
+		default:
+			return EINVAL;
+	}
+
+	//VM_FAULT_READ or WRITE. No TLB entry found
+	//Check if page is allocated
+	if(pte == NULL){
+		//Allocating page for the first time
+		vaddr_t newpage = alloc_kpages(1);
+		if(newpage==0)
+			return ENOMEM;
+
+		pte_insert(as, faultaddress, newpage, page_permission);
+
+		tlbhi = faultaddress & TLBHI_VPAGE;
+		tlblo = (newpage & TLBLO_PPAGE) | TLBLO_VALID;
+		/////////////////////////////////////////////////////////////////////////newpage type
+		tlb_random(tlbhi, tlblo);
+	}
+
+	else{
+		//Page allocated but not in TLB
+		vaddr_t pbase = pte->paddr<<12;
+		tlbhi = faultaddress & TLBHI_VPAGE;
+		tlblo = (pbase & TLBLO_PPAGE) | TLBLO_VALID;
+		tlb_random(tlbhi, tlblo);
+	}
+
+	splx(spl);
 	return 0;
 }

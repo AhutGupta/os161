@@ -86,4 +86,6 @@ pid_t waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval);
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
+int sbrk(intptr_t amount, int *retval);
+
 #endif /* _SYSCALL_H_ */
