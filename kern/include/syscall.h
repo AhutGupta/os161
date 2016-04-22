@@ -75,7 +75,7 @@ int sys_chdir(const char *pathname);
 int sys__getcwd(char *buf, size_t buflen, int *retval);
 int sys_dup2(int oldfd, int newfd, int *retval);
 
-pid_t givepid(void);
+//pid_t givepid(void);
 pid_t getpid(void);
 void child_forkentry(void* c_tf, unsigned long c_addrspace);
 pid_t sys_fork(struct trapframe *parent_tf, int *retval);
@@ -86,5 +86,7 @@ int sys_execv(const char *program, char **user_args);
 
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
+
+int sbrk(intptr_t amount, int *retval);
 
 #endif /* _SYSCALL_H_ */

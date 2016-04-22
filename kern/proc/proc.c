@@ -57,26 +57,21 @@
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
-
-struct proc_table *proc_table = NULL;
-int count_proc;
+struct lock* proc_lock;
 
 pid_t givepid(void) {
-	// if(proc_table == NULL){
-	// 	count_proc = 1;
-	// 	proc_table = (struct proc_table *)kmalloc(sizeof(struct proc_table));
-	// 	proc_table->next = NULL;
-	// 	proc_table->pid = 1;
-	// 	proc_table->proc = (struct proc *) kmalloc(sizeof(struct proc));
-	// }
-return ++count_proc;
+	for(pid_t i = PID_MIN; i<MAX_PROC; i++){
+		if(proc_table[i]==NULL)
+			return i;
+	}
+	return -1;
 }
 
 /*
  * Create a proc structure.
  */
-struct proc *
-proc_create(const char *name)
+
+struct proc *proc_create(const char *name)
 {
 	struct proc *proc;
 
@@ -107,10 +102,8 @@ proc_create(const char *name)
 	struct semaphore *sem;
 	sem = sem_create("child", 0);
 	proc->exitsem = sem;
-
-	struct proc_table *temporary;
-
-	if(proc_table == NULL){
+	
+	/* if(proc_table == NULL){
 		count_proc = 1;
 		proc_table = (struct proc_table *)kmalloc(sizeof(struct proc_table));
 		proc_table->next = NULL;
@@ -126,9 +119,10 @@ proc_create(const char *name)
 			temporary->next->proc = proc;
 			temporary->next->pid = proc->pid;
 		if(temporary->next->pid > PID_MAX) {
+			lock_release(proc_lock);
 			return NULL;
-		}
-	}
+		} 
+	} */
 
 	return proc;
 }
@@ -153,14 +147,11 @@ proc_destroy(struct proc *proc)
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
 
-	pid_t pid;
-	pid = curproc->pid;
-	struct proc_table *demo, *temporary;
-	for(demo = proc_table; demo->next->pid != pid; demo=demo->next);
-		temporary = demo->next;
-		demo->next = demo->next->next;
-	kfree(temporary->proc);
-	kfree(temporary);
+	lock_acquire(proc_lock);
+	kfree(proc_table[proc->pid]);
+	lock_release(proc_lock);
+
+	sem_destroy(proc->exitsem);
 
 	/*
 	 * We don't take p_lock in here because we must have the only
@@ -235,6 +226,7 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+	proc_lock = lock_create("proctable_lock");
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");

@@ -164,6 +164,17 @@ syscall(struct trapframe *tf)
 		// retval = 0;
 		// break;
 
+      	case SYS_sbrk:
+        err = sbrk((intptr_t)tf->tf_a0, &retval);
+        break;
+
+      	// case SYS_waitpid:
+      	// err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
+      	// break;
+
+      	// case SYS__exit:
+      	// sys__exit(tf->tf_a0);
+      	// panic("Returning From Exit Command\n");
 		case SYS_fork:
 		err = sys_fork(tf,&retval);
 		break;

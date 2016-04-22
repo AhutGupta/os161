@@ -22,6 +22,8 @@
 #include <syscall.h>
 #include <trapframe.h>
 #include <addrspace.h>
+
+#define HEAP_MAX 0x40000000
 #include <spl.h>
 #include <kern/wait.h>
 
@@ -423,63 +425,6 @@ int sys_dup2(int oldfd, int newfd, int *retval){
 
 }
 
-// void child_forkentry(void* c_tf, unsigned long c_addrspace) {
-
-// 	struct trapframe *new_tf;
-// 	struct addrspace * new_addrspace;
-
-// 	new_tf = (struct trapframe *) c_tf;
-// 	new_addrspace = (struct addrspace *) c_addrspace;
-
-// 	new_tf->tf_a3 = 0;
-// 	new_tf->tf_v0 = 0;
-// 	new_tf->tf_epc += 4;
-
-// 	curthread->t_proc->p_addrspace = new_addrspace;
-// 	as_activate();
-
-// 	struct trapframe tf_new = *new_tf;
-// 	mips_usermode(&tf_new);
-// }
-
-// pid_t sys_fork(struct trapframe *parent_tf, int *retval){
-	
-// 	struct addrspace *child_addrspace;
-// 	int result;
-// 	const char *child = "child thread";
-// 	struct proc *child_proc = (struct proc *) kmalloc(sizeof(struct proc*));
-// 	struct trapframe *child_tf = kmalloc(sizeof(struct trapframe*));
-	
-// 	if(child_proc == NULL){
-// 		kfree(child_tf);
-// 		return ENOMEM;
-// 	}
-// 	if(child_tf == NULL){
-// 		kfree(child_proc);
-// 		return ENOMEM;
-// 	}
-
-// 	child_tf = parent_tf;
-// 	result = as_copy(curthread->t_proc->p_addrspace, &child_addrspace);
-// 	if (result) {
-// 		return ENOMEM;
-// 	}
-
-// 	result = thread_fork(child, child_proc, child_forkentry, (void *) child_tf, (unsigned long) child_addrspace);
-// 	if (result) {
-// 		kprintf("thread_fork failed.....\n");
-// 		return ENOMEM;
-// 	}
-
-// 	//Return child PID for parent
-// 	*retval = 1;
-// 	return 0;
-
-
-// //.......................
-
-// }
-
 pid_t getpid(){
 
 	return curproc -> pid;
@@ -487,9 +432,21 @@ pid_t getpid(){
 
 pid_t sys_fork(struct trapframe *parent_tf, int *retval){
 	int result = 0;
-	struct proc * child_proc;
 	// child_proc = (struct proc *) kmalloc(sizeof(struct proc));
-	child_proc = proc_create("Child Process");
+	struct proc *child_proc = proc_create("Child Process");
+
+	//Assign a PID for the child
+	lock_acquire(proc_lock);
+	pid_t c_pid = givepid();
+	if(c_pid == -1){
+		*retval = -1;
+		lock_release(proc_lock);
+		return ENPROC;
+	}
+	proc_table[c_pid] = child_proc;
+	child_proc->ppid = curproc->pid;
+	child_proc->pid = c_pid;
+	lock_release(proc_lock);
 
 	struct addrspace *child_addrspace;
 
@@ -536,44 +493,43 @@ void entrypoint(void* data1, unsigned long data2) {
 }
 
 void sys_exit(int exitcode){
-	struct proc_table *demo;
 
-	for(demo = proc_table; demo->pid != curproc->ppid || demo == NULL; demo=demo->next){
-		kprintf("Inside Ppid for loop. PID: %d", demo->pid);
+	pid_t i,j;
+	for(i=PID_MIN; i<MAX_PROC; i++){
+		if(curproc->ppid == i){
+			kprintf("EXIT..My PPID is: %d", i);
+			break;
+		}
 	}
 
-	if(demo == NULL){
-		//
-	} else if(demo -> proc -> exited == false){
-		struct proc_table *temporary;
+	if(i == MAX_PROC){
+		proc_destroy(curproc);
+	} 
+	else if(proc_table[i]-> exited == false){
 
-		// for(temporary = proc_table; temporary->pid != curproc->pid || temporary == NULL; temporary=temporary->next){
-		// 	kprintf("Inside For loop. PID: %d", temporary->pid);
-		// 	if(temporary->pid == curproc->pid){
-		// 		break;
-		// 	}
-		// }
-
-		temporary = proc_table;
-
+<<<<<<< HEAD
 		while(temporary != NULL){
 			kprintf("Inside For loop. PID: %d", temporary->pid);
 			if(temporary->proc->pid == curproc->pid){
+=======
+		for(j=PID_MIN; j<MAX_PROC; j++){
+			if(curproc->pid == j){
+				kprintf("EXIT. Found my PID: %d", j);
+>>>>>>> a8d632418d93137758f8d946540af24a870b0791
 				break;
 			}
-			temporary = temporary->next;
 		}	
 
 		kprintf("Exited from FOR loop...\n");
 
-		if(temporary == NULL){
+		if(j == MAX_PROC){
 			kprintf("This Process ID %d is not there in Table.", curproc->pid);
 		}
 		// exitcode = 0;
-		temporary->proc->exitcode = _MKWAIT_EXIT(exitcode);
-		temporary->proc->exited = true;
+		proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
+		proc_table[j]->exited = true;
 
-		V(temporary->proc->exitsem);
+		V(proc_table[j]->exitsem);
 	} else {
 		proc_destroy(curproc);
 	}
@@ -583,7 +539,6 @@ void sys_exit(int exitcode){
 
 pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 	int result;
-	struct proc *child;
 
 	if(options != 0){
 		return EINVAL;
@@ -597,7 +552,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 		return EINVAL;
 	}
 
-	if(pid > PID_MAX){
+	if(pid > MAX_PROC){
 		return ESRCH;
 	}
 
@@ -609,34 +564,31 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 		return ECHILD;
 	}
 
-	struct proc_table *demo;
-
 	// for(demo=proc_table; demo->pid != pid || demo == NULL; demo=demo->next);
 
-	demo=proc_table;
-	while(demo != NULL){
-		kprintf("WaitPID...Inside loop. PPID: %d", demo->proc->ppid);
-		if(demo->proc->ppid == curproc->pid && demo->proc->pid == pid){
+	pid_t i;
+	for(i=PID_MIN; i<MAX_PROC; i++){
+		if(i==pid && proc_table[i]->ppid==curproc->pid){
+			kprintf("Found my child's PID\n");
 			break;
 		}
-		demo = demo->next;
 	}
 
-	if(demo == NULL){
+	if(i == MAX_PROC){
 		return ESRCH;
 	}
 
-	if(demo->proc->ppid != curproc->pid){
+	if(proc_table[i]->ppid != curproc->pid){
 		return ECHILD;
 	}
 
-	if(demo->proc->exited == true){
-		P(demo->proc->exitsem);
+	if(proc_table[i]->exited == true){
+		P(proc_table[i]->exitsem);
 	}
 
-	child = demo->proc;
+	//child = proc_table[i];
 
-	result = copyout((const void *) &(child->exitcode), (userptr_t) status, sizeof(int));
+	result = copyout(&(proc_table[i]->exitcode), (userptr_t) status, sizeof(int));
 
 	if(result){
 		return EFAULT;
@@ -644,14 +596,50 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 
 	*retval = pid;
 
-	proc_destroy(child);
+	proc_destroy(proc_table[i]);
 
 	return 0;
 }
 
+int sbrk(intptr_t amount, int *retval){
+	/*struct addrspace *as = proc_getas();
+
+    if (amount == 0){
+    	*retval = as->heap_end;
+    	return 0;
+    }
+    else if(amount<0){
+    	if ((long)as->heap_end + (long)amount >= (long)as->heap_start) {
+            as->heap_end += amount;
+            *retval = as->heap_end;
+            return 0;
+        }
+    	*retval = -1;
+    	return EINVAL;
+    }
+    else{
+    	
+    	if ((as->heap_end+amount) < (USERSTACK-STACKPAGES * PAGE_SIZE) && (as->heap_end+amount) < (as->heap_start+HEAP_MAX)) {
+        *retval = as->heap_end;
+        as->heap_end += amount;
+        return 0;
+    	}
+
+    	*retval = -1;
+    	return ENOMEM;
+    } */
+    (void) amount;
+    (void) *retval;
+    return 0;
+}
+
 int sys_execv(const char *program, char **user_args){
 
-	int res, length, index = 0, i = 0;
+	(void) program;
+	(void) user_args;
+	return 0;
+
+	/* int res, length, index = 0, i = 0;
 	struct lock *lock;
 	lock = lock_create("Lock for Execv");
 	struct vnode *vnode;
@@ -799,11 +787,8 @@ int sys_execv(const char *program, char **user_args){
 
 	enter_new_process(index, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 	panic("panic enter_new_process");
-	return EINVAL;
+	return EINVAL; */
 
 }
-
-
-
 
 
