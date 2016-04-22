@@ -22,8 +22,13 @@
 #include <syscall.h>
 #include <trapframe.h>
 #include <addrspace.h>
+<<<<<<< HEAD
 
 #define HEAP_MAX 0x40000000
+=======
+#include <spl.h>
+#include <kern/wait.h>
+>>>>>>> f4c34d35c28e9f1b0c07945161aa624da9d0b35f
 
 int initial_ftable(void){
 	struct vnode *vin, *vout, *verr;
@@ -135,6 +140,8 @@ int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval){
 	
 	else
 		curthread->file_table[fd]->offset = 0;
+
+
 	curthread->file_table[fd]->ref_count = 1;
 	curthread->file_table[fd]->filelock=lock_create(name);
 	curthread->file_table[fd]->vnode = fileobject;
@@ -384,11 +391,6 @@ int sys__getcwd(char *buf, size_t buflen, int *retval){
     return result;
  }
 
-pid_t getpid(){
-
-	return curthread -> t_pid;
-}
-
 int sys_dup2(int oldfd, int newfd, int *retval){
 
 	int result;
@@ -426,77 +428,233 @@ int sys_dup2(int oldfd, int newfd, int *retval){
 
 }
 
-void child_forkentry(void* c_tf, unsigned long c_addrspace) { 
+// void child_forkentry(void* c_tf, unsigned long c_addrspace) {
 
-	struct trapframe *new_tf;
-	struct addrspace * new_addrspace;
+// 	struct trapframe *new_tf;
+// 	struct addrspace * new_addrspace;
 
-	new_tf = (struct trapframe *) c_tf;
-	new_addrspace = (struct addrspace *) c_addrspace;
+// 	new_tf = (struct trapframe *) c_tf;
+// 	new_addrspace = (struct addrspace *) c_addrspace;
 
-	new_tf->tf_a3 = 0;
-	new_tf->tf_v0 = 0;
-	new_tf->tf_epc += 4;
+// 	new_tf->tf_a3 = 0;
+// 	new_tf->tf_v0 = 0;
+// 	new_tf->tf_epc += 4;
 
-	curthread->t_proc->p_addrspace = new_addrspace;
-	as_activate();
+// 	curthread->t_proc->p_addrspace = new_addrspace;
+// 	as_activate();
 
-	struct trapframe tf_new = *new_tf;
-	mips_usermode(&tf_new);
+// 	struct trapframe tf_new = *new_tf;
+// 	mips_usermode(&tf_new);
+// }
+
+// pid_t sys_fork(struct trapframe *parent_tf, int *retval){
+	
+// 	struct addrspace *child_addrspace;
+// 	int result;
+// 	const char *child = "child thread";
+// 	struct proc *child_proc = (struct proc *) kmalloc(sizeof(struct proc*));
+// 	struct trapframe *child_tf = kmalloc(sizeof(struct trapframe*));
+	
+// 	if(child_proc == NULL){
+// 		kfree(child_tf);
+// 		return ENOMEM;
+// 	}
+// 	if(child_tf == NULL){
+// 		kfree(child_proc);
+// 		return ENOMEM;
+// 	}
+
+// 	child_tf = parent_tf;
+// 	result = as_copy(curthread->t_proc->p_addrspace, &child_addrspace);
+// 	if (result) {
+// 		return ENOMEM;
+// 	}
+
+// 	result = thread_fork(child, child_proc, child_forkentry, (void *) child_tf, (unsigned long) child_addrspace);
+// 	if (result) {
+// 		kprintf("thread_fork failed.....\n");
+// 		return ENOMEM;
+// 	}
+
+// 	//Return child PID for parent
+// 	*retval = 1;
+// 	return 0;
+
+
+// //.......................
+
+// }
+
+pid_t getpid(){
+
+	return curproc -> pid;
 }
 
 pid_t sys_fork(struct trapframe *parent_tf, int *retval){
-	
+	int result = 0;
+	struct proc * child_proc;
+	// child_proc = (struct proc *) kmalloc(sizeof(struct proc));
+	child_proc = proc_create("Child Process");
+
 	struct addrspace *child_addrspace;
-	int result;
-	const char *child = "child thread";
-	struct proc *child_proc = (struct proc *) kmalloc(sizeof(struct proc*));
-	struct trapframe *child_tf = kmalloc(sizeof(struct trapframe*));
-	
-	if(child_proc == NULL){
-		kfree(child_tf);
+
+	result = as_copy(curproc->p_addrspace, &child_addrspace);
+
+	if(result){
 		return ENOMEM;
 	}
+
+	struct trapframe *child_tf = kmalloc(sizeof(struct trapframe));
+
 	if(child_tf == NULL){
-		kfree(child_proc);
 		return ENOMEM;
 	}
 
-	child_tf = parent_tf;
-	result = as_copy(curthread->t_proc->p_addrspace, &child_addrspace);
-	if (result) {
+	*child_tf = *parent_tf;
+
+	result = thread_fork("Child Thread", child_proc, entrypoint, (struct trapframe *) child_tf, (unsigned long) child_addrspace);
+
+	if(result){
 		return ENOMEM;
 	}
 
-	result = thread_fork(child, child_proc, child_forkentry, (void *) child_tf, (unsigned long) child_addrspace);
-	if (result) {
-		kprintf("thread_fork failed.....\n");
-		return ENOMEM;
-	}
-
-	//Return child PID for parent
-	*retval = 1;
+	*retval = child_proc->pid;
 
 	return 0;
-
-
-//.......................
-
 }
 
-pid_t waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval)
-{
-	int status; 
-	int result;
+void entrypoint(void* data1, unsigned long data2) {
+	struct trapframe *tf, new_tf;
+	struct addrspace * addr;
+	
+	tf = (struct trapframe *) data1;
+	addr = (struct addrspace *) data2;
+	
+	tf->tf_a3 = 0;
+	tf->tf_v0 = 0;
+	tf->tf_epc += 4;
+	
+	curproc->p_addrspace = addr;
+	as_activate();
+	new_tf = *tf;
+	mips_usermode(&new_tf);
+}
 
-	result = pid_wait(pid, &status, flags, retval);
-	if (result) {
-		return result;
+void sys_exit(int exitcode){
+	struct proc_table *demo;
+
+	for(demo = proc_table; demo->pid != curproc->ppid || demo == NULL; demo=demo->next){
+		kprintf("Inside Ppid for loop. PID: %d", demo->pid);
 	}
 
-	return copyout(&status, retstatus, sizeof(int));
+	if(demo == NULL){
+		//
+	} else if(demo -> proc -> exited == false){
+		struct proc_table *temporary;
+
+		// for(temporary = proc_table; temporary->pid != curproc->pid || temporary == NULL; temporary=temporary->next){
+		// 	kprintf("Inside For loop. PID: %d", temporary->pid);
+		// 	if(temporary->pid == curproc->pid){
+		// 		break;
+		// 	}
+		// }
+
+		temporary = proc_table;
+
+		while(temporary != NULL){
+			kprintf("Inside For loop. PID: %d", temporary->pid);
+			if(temporary->pid == curproc->pid){
+				break;
+			}
+			temporary = temporary->next;
+		}	
+
+		kprintf("Exited from FOR loop...\n");
+
+		if(temporary == NULL){
+			kprintf("This Process ID %d is not there in Table.", curproc->pid);
+		}
+		// exitcode = 0;
+		temporary->proc->exitcode = _MKWAIT_EXIT(exitcode);
+		temporary->proc->exited = true;
+
+		V(temporary->proc->exitsem);
+	} else {
+		proc_destroy(curproc);
+	}
+
+	thread_exit();
 }
 
+pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
+	int result;
+	struct proc *child;
+
+	if(options != 0){
+		return EINVAL;
+	}
+
+	if(status == NULL){
+		return EFAULT;
+	}
+
+	if(pid < PID_MIN){
+		return EINVAL;
+	}
+
+	if(pid > PID_MAX){
+		return ESRCH;
+	}
+
+	if(pid == curproc->pid){
+		return ECHILD;
+	}
+
+	if(pid == curproc->ppid){
+		return ECHILD;
+	}
+
+	struct proc_table *demo;
+
+	// for(demo=proc_table; demo->pid != pid || demo == NULL; demo=demo->next);
+
+	demo=proc_table;
+	while(demo != NULL){
+		kprintf("WaitPID...Inside loop. PPID: %d", demo->proc->ppid);
+		if(demo->proc->ppid == curproc->pid && demo->proc->pid == pid){
+			break;
+		}
+		demo = demo->next;
+	}
+
+	if(demo == NULL){
+		return ESRCH;
+	}
+
+	if(demo->proc->ppid != curproc->pid){
+		return ECHILD;
+	}
+
+	if(demo->proc->exited == true){
+		P(demo->proc->exitsem);
+	}
+
+	child = demo->proc;
+
+	result = copyout((const void *) &(child->exitcode), (userptr_t) status, sizeof(int));
+
+	if(result){
+		return EFAULT;
+	}
+
+	*retval = pid;
+
+	proc_destroy(child);
+
+	return 0;
+}
+
+<<<<<<< HEAD
 int sbrk(intptr_t amount, int *retval){
 	struct addrspace *as = proc_getas();
 
@@ -526,6 +684,163 @@ int sbrk(intptr_t amount, int *retval){
     }
 
 }
+=======
+int sys_execv(const char *program, char **user_args){
+
+	int res, length, index = 0, i = 0;
+	struct lock *lock;
+	lock = lock_create("Lock for Execv");
+	struct vnode *vnode;
+	vaddr_t entrypoint, stackptr;
+
+	lock_acquire(lock);
+
+	struct addrspace *temporary;
+	temporary = curproc->p_addrspace;
+
+	if(program == NULL || user_args == NULL){
+		return EFAULT;
+	}
+
+	char *pname;
+	size_t size;
+
+	pname = (char *) kmalloc(sizeof(char) *PATH_MAX);
+	res = copyinstr((const_userptr_t) program, pname, PATH_MAX, &size);
+
+	if(res){
+		kfree(pname);
+		return EFAULT;
+	}
+
+	if(size == 1){
+		kfree(pname);
+		return EINVAL;
+	}
+
+	char **arguments = (char **) kmalloc(sizeof(char **));
+	res = copyin((const_userptr_t) user_args, arguments, sizeof(char **));
+	if(res){
+		kfree(pname);
+		kfree(arguments);
+		return EFAULT;
+	}
+
+	while(user_args[i] != NULL ){
+		arguments[i] = (char *) kmalloc(sizeof(char) * PATH_MAX);
+		res = copyinstr((const_userptr_t) user_args[i], arguments[i], PATH_MAX,
+				&size);
+		if (res) {
+			kfree(pname);
+			kfree(arguments);
+			return EFAULT;
+		}
+		i++;
+	}
+
+	arguments[i] = NULL;
+
+	res = vfs_open(pname, O_RDONLY, 0, &vnode);
+	if(res) {
+		kfree(pname);
+		kfree(arguments);
+		return res;
+	}
+
+	if(temporary != NULL){
+		as_destroy(temporary);
+		temporary = NULL;
+	}
+
+	KASSERT(temporary == NULL);
+	if((temporary=as_create()) == NULL){
+		kfree(pname);
+		kfree(arguments);
+		vfs_close(vnode);
+		return ENOMEM;
+	}
+
+	as_activate();
+	res = load_elf(vnode, &entrypoint);
+	if(res){
+		kfree(pname);
+		kfree(arguments);
+		return res;
+	}
+	vfs_close(vnode);
+
+	res = as_define_stack(temporary, &stackptr);
+	if(res){
+		kfree(pname);
+		kfree(arguments);
+		return res;
+	}
+
+	while(arguments[index] != NULL){
+		char * arg;
+		length = strlen(arguments[index]) + 1;
+
+		int original_length = length;
+		if(length % 4 != 0){
+			length = length + (4 - length%4);
+		}
+
+		arg = kmalloc(sizeof(length));
+		arg = kstrdup(arguments[index]);
+
+		for(int i=0; i<length; ++i){
+			if(i >= original_length){
+				arg[i] = '\0';
+			}
+			else {
+				arg[i] = arguments[index][i];
+			}
+		}
+
+		stackptr = stackptr - length;
+
+		res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) length);
+		if(res){
+			kfree(pname);
+			kfree(arguments);
+			kfree(arg);
+			return res;
+		}
+
+		kfree(arg);
+		arguments[index] = (char *)stackptr;
+
+		index++;
+	}
+
+	if(arguments[index] == NULL){
+		stackptr = stackptr - 4*sizeof(char);
+	}
+
+	for(int i = index-1; i >= 0; --i){
+		stackptr = stackptr - sizeof(char*);
+		res = copyout((const void *) (arguments+i), (userptr_t) stackptr, (sizeof(char *)));
+
+		if(res){
+			kfree(pname);
+			kfree(arguments);
+			return res;
+		}
+	}
+	
+	kfree(pname);
+	kfree(arguments);
+
+	lock_release(lock);
+
+	enter_new_process(index, (userptr_t) stackptr, NULL, stackptr, entrypoint);
+	panic("panic enter_new_process");
+	return EINVAL;
+
+}
+
+
+>>>>>>> f4c34d35c28e9f1b0c07945161aa624da9d0b35f
 
 
 

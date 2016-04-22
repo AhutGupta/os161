@@ -75,13 +75,14 @@ int sys_chdir(const char *pathname);
 int sys__getcwd(char *buf, size_t buflen, int *retval);
 int sys_dup2(int oldfd, int newfd, int *retval);
 
+pid_t givepid(void);
 pid_t getpid(void);
 void child_forkentry(void* c_tf, unsigned long c_addrspace);
 pid_t sys_fork(struct trapframe *parent_tf, int *retval);
-pid_t waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval);
-// int execv(const char *program, char **args);
-// int execve(const char *program, char **args, char **environ);
-// pid_t waitpid(pid_t pid, int *status, int options);
+pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval);
+void sys_exit(int exitcode);
+int sys_execv(const char *program, char **user_args);
+// void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr, vaddr_t entrypoint);
 
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
