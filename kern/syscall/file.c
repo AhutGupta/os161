@@ -507,15 +507,10 @@ void sys_exit(int exitcode){
 	} 
 	else if(proc_table[i]-> exited == false){
 
-<<<<<<< HEAD
-		while(temporary != NULL){
-			kprintf("Inside For loop. PID: %d", temporary->pid);
-			if(temporary->proc->pid == curproc->pid){
-=======
+
 		for(j=PID_MIN; j<MAX_PROC; j++){
 			if(curproc->pid == j){
 				kprintf("EXIT. Found my PID: %d", j);
->>>>>>> a8d632418d93137758f8d946540af24a870b0791
 				break;
 			}
 		}	
