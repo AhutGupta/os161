@@ -185,7 +185,7 @@ int sys_read(int fd, void *buf, size_t buflen, int *retval){
 
 	result = copyin((const_userptr_t) buf, mem_buf, buflen);
 	if(result){
-		kprintf("Bad pointer...\n");
+		kprintf("In sys_read. Bad pointer...\n");
 		return EFAULT;
 	}
 
@@ -232,7 +232,7 @@ int sys_write(int fd, const void *buf, size_t nbytes, int *retval){
 
 	result = copyin((const_userptr_t) buf, mem_buf, nbytes);
 	if(result){
-		kprintf("Bad pointer...\n");
+		kprintf("In sys_write. Bad pointer...\n");
 		return EFAULT;
 	}
 
@@ -375,7 +375,7 @@ int sys__getcwd(char *buf, size_t buflen, int *retval){
 
 	result = copyin((const_userptr_t) buf, mem_buf, buflen);
 	if(result){
-		kprintf("Bad pointer...\n");
+		kprintf("In getCWD. Bad pointer...\n");
 		return EFAULT;
 	}
 
@@ -505,12 +505,12 @@ void sys_exit(int exitcode){
 
 	for(j=PID_MIN; j<MAX_PROC; j++){
 			if(curproc->pid == j){
-				kprintf("EXIT. Found my PID: %d", j);
+				//kprintf("EXIT. Found my PID: %d, AND PPID: %d", j, curproc->ppid);
 				break;
 			}
 		}	
 
-	kprintf("Exited from FOR loop...\n");
+	//kprintf("Exited from FOR loop...\n");
 
 	if(j == MAX_PROC || proc_table[j] == NULL){
 		kprintf("This Process ID %d is not there in Table.", curproc->pid);
@@ -521,13 +521,13 @@ void sys_exit(int exitcode){
 		//struct addrspace *as = curproc->p_addrspace;
 		struct addrspace *as = proc_setas(NULL);
 		as_destroy(as);
-		kprintf("Cleared Addrspace in sys_exit...\n");
+		//kprintf("Cleared Addrspace in sys_exit...\n");
 	}
 
 	// exitcode = 0;
 	proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
 	proc_table[j]->exited = true;
-	kprintf("Was able to set the exitcode...\n");
+	//kprintf("Was able to set the exitcode...\n");
 	splhigh();
 	V(proc_table[j]->exitsem);
 
@@ -616,8 +616,8 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 
 	pid_t i;
 	for(i=PID_MIN; i<MAX_PROC; i++){
-		if(i==pid && proc_table[i]->ppid==curproc->pid){
-			kprintf("Found my child's PID\n");
+		if(i==pid){
+			kprintf("In WAITPID. Found my child's PID: %d ", i);
 			break;
 		}
 	}
@@ -630,12 +630,11 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 		return ECHILD;
 	}
 
-	P(proc_table[i]->exitsem);
-	kprintf("In WaitPID. Got P...\n");
-
-
-
-	//child = proc_table[i];
+	if(proc_table[i]->exited == false){
+		P(proc_table[i]->exitsem);
+		kprintf("In WaitPID. Got P for PID: %d", i);
+	}
+	
 
 	result = copyout(&(proc_table[i]->exitcode), (userptr_t) status, sizeof(int));
 

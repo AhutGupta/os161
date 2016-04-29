@@ -61,7 +61,7 @@
  */
 #include <synch.h>
 #include <current.h>
-struct semaphore *cmd_sem;
+//struct semaphore *cmd_sem;
 int progthread_pid;
 
 /* END A4 SETUP */
@@ -91,6 +91,18 @@ struct semaphore *sem;
  * It copies the program name because runprogram destroys the copy
  * it gets by passing it to vfs_open().
  */
+
+static int waitkernel(pid_t pid){
+	P(proc_table[pid]->exitsem);
+	//kprintf("Got P for Kernel thread. Destroying proc now..\n");
+	//proc_destroy(proc_table[pid]);
+	sem_destroy(proc_table[pid]->exitsem);
+	kfree(proc_table[pid]->p_name);
+	kfree(proc_table[pid]);
+	//kprintf("Wait Process in Kernel Destroyed. Hurray.\n");
+	return 0;
+}
+
 static
 void
 cmd_progthread(void *ptr, unsigned long nargs)
@@ -103,7 +115,7 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	/* Record pid of progthread, so only this thread will do a V()
 	 * on the semaphore when it exits.
 	 */
-	progthread_pid = curthread->t_pid;
+	//progthread_pid = curproc->pid;
 	/* END A4 SETUP */
 
 	KASSERT(nargs >= 1);
@@ -123,7 +135,8 @@ cmd_progthread(void *ptr, unsigned long nargs)
 			strerror(result));
 		return;
 	}
-	V(cmd_sem);
+	//V(cmd_sem);
+	sys_exit(0);
 
 	/* NOTREACHED: runprogram only returns on error. */
 }
@@ -168,13 +181,19 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
-	
+	while(proc_table[PID_MIN] == NULL){
+		//kprintf("Waiting for the first thread to be created...\n");
+	}
+	//kprintf("Calling WaitPID from kernel menu. For PID: %d", PID_MIN);
+	waitkernel(PID_MIN);
 
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
 	 */
-	P(cmd_sem);
+	// kprintf("Before P");
+	// P(cmd_sem);
+	// kprintf("After P");
 
 	// Wait for all threads to finish cleanup, otherwise khu be a bit behind,
 	// especially once swapping is enabled.
@@ -848,11 +867,11 @@ menu(char *args)
 {
 	char buf[64];
 
-	cmd_sem = sem_create("cmdsem", 0);
-	if (cmd_sem == NULL) {
-		panic("menu: could not create cmd_sem\n");
-	}
-	// V(cmd_sem);
+	// cmd_sem = sem_create("cmdsem", 0);
+	// if (cmd_sem == NULL) {
+	// 	panic("menu: could not create cmd_sem\n");
+	// }
+	// // V(cmd_sem);
 
 	menu_execute(args, 1);
 

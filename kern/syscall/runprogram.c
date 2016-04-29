@@ -93,6 +93,7 @@ runprogram(char *progname)
 	vfs_close(v);
 
 	curproc->pid = PID_MIN;
+	proc_table[PID_MIN] = curproc;
 
 	result = initial_ftable();
 	if(result){
