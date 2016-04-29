@@ -840,9 +840,9 @@ thread_exit(void)
 	cur = curthread;
 
 	/*
-	 * Detach from our process. You might need to move this action
-	 * around, depending on how your wait/exit works.
-	 */
+	* Detach from our process. You might need to move this action
+	* around, depending on how your wait/exit works.
+	*/
 	proc_remthread(cur);
 
 	/* Make sure we *are* detached (move this only if you're sure!) */
@@ -861,6 +861,9 @@ thread_exit(void)
 
 	/* Interrupts off on this processor */
 	splhigh();
+	
+	// kprintf("Was able to set V. Entering Zombie Mode\n");
+
 	thread_switch(S_ZOMBIE, NULL, NULL);
 	panic("braaaaaaaiiiiiiiiiiinssssss\n");
 }

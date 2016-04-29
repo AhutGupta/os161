@@ -434,19 +434,22 @@ pid_t sys_fork(struct trapframe *parent_tf, int *retval){
 	int result = 0;
 	// child_proc = (struct proc *) kmalloc(sizeof(struct proc));
 	struct proc *child_proc = proc_create("Child Process");
+	if(child_proc == NULL){
+		*retval = -1;
+		return ENPROC;
+	}
 
-	//Assign a PID for the child
 	lock_acquire(proc_lock);
 	pid_t c_pid = givepid();
 	if(c_pid == -1){
-		*retval = -1;
 		lock_release(proc_lock);
-		return ENPROC;
+		return ENOMEM;
 	}
-	proc_table[c_pid] = child_proc;
 	child_proc->ppid = curproc->pid;
 	child_proc->pid = c_pid;
+	proc_table[c_pid] = child_proc;
 	lock_release(proc_lock);
+
 
 	struct addrspace *child_addrspace;
 
@@ -494,40 +497,90 @@ void entrypoint(void* data1, unsigned long data2) {
 
 void sys_exit(int exitcode){
 
-	pid_t i,j;
-	for(i=PID_MIN; i<MAX_PROC; i++){
-		if(curproc->ppid == i){
-			kprintf("EXIT..My PPID is: %d", i);
-			break;
-		}
-	}
+	pid_t j;
+	//int r;
+	//for(int i=0; i<OPEN_MAX; ++i){
+	//	sys_close(i, &r);
+	//}
 
-	if(i == MAX_PROC){
-		proc_destroy(curproc);
-	} 
-	else if(proc_table[i]-> exited == false){
-
-
-		for(j=PID_MIN; j<MAX_PROC; j++){
+	for(j=PID_MIN; j<MAX_PROC; j++){
 			if(curproc->pid == j){
 				kprintf("EXIT. Found my PID: %d", j);
 				break;
 			}
 		}	
 
-		kprintf("Exited from FOR loop...\n");
+	kprintf("Exited from FOR loop...\n");
 
-		if(j == MAX_PROC){
-			kprintf("This Process ID %d is not there in Table.", curproc->pid);
-		}
-		// exitcode = 0;
-		proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
-		proc_table[j]->exited = true;
-
-		V(proc_table[j]->exitsem);
-	} else {
-		proc_destroy(curproc);
+	if(j == MAX_PROC || proc_table[j] == NULL){
+		kprintf("This Process ID %d is not there in Table.", curproc->pid);
+		panic("Did not find this Process in the proc_table\n");
 	}
+
+	if (curproc->p_addrspace) {
+		//struct addrspace *as = curproc->p_addrspace;
+		struct addrspace *as = proc_setas(NULL);
+		as_destroy(as);
+		kprintf("Cleared Addrspace in sys_exit...\n");
+	}
+
+	// exitcode = 0;
+	proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
+	proc_table[j]->exited = true;
+	kprintf("Was able to set the exitcode...\n");
+	splhigh();
+	V(proc_table[j]->exitsem);
+
+
+
+	// for(i=PID_MIN; i<MAX_PROC; i++){
+	// 	if(curproc->ppid == i){
+	// 		kprintf("EXIT..My PPID is: %d", i);
+	// 		break;
+	// 	}
+	// }
+
+	// if(i == MAX_PROC){
+	// 	kprintf("i= MAXPROC....\n");
+	// 	curproc->p_numthreads--;
+	// 	proc_destroy(curproc);
+	// } 
+	// else if(proc_table[i]-> exited == false){
+	// 	for(j=PID_MIN; j<MAX_PROC; j++){
+	// 		if(curproc->pid == j){
+	// 			kprintf("EXIT. Found my PID: %d", j);
+	// 			break;
+	// 		}
+	// 	}	
+
+	// 	kprintf("Exited from FOR loop...\n");
+
+	// 	if(j == MAX_PROC){
+	// 		kprintf("This Process ID %d is not there in Table.", curproc->pid);
+	// 	}
+
+	// 	if (curproc->p_addrspace) {
+	// 		struct addrspace *as = proc_setas(NULL);
+	// 		//= curproc->p_addrspace;
+	// 		// curproc->p_addrspace = NULL;
+	// 		// as_activate();
+	// 		as_destroy(as);
+	// 		kprintf("Cleared Addrspace...\n");
+
+	// 	}
+
+	// 	// exitcode = 0;
+	// 	proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
+	// 	proc_table[j]->exited = true;
+	// 	splhigh();
+	// 	V(proc_table[j]->exitsem);
+	// 	kprintf("Able to set V.....\n");
+
+	// } else {
+	// 	kprintf("Else Condition....\n");
+	// 	curproc->p_numthreads--;
+	// 	proc_destroy(curproc);
+	// } 
 
 	thread_exit();
 }
@@ -577,9 +630,10 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 		return ECHILD;
 	}
 
-	if(proc_table[i]->exited == true){
-		P(proc_table[i]->exitsem);
-	}
+	P(proc_table[i]->exitsem);
+	kprintf("In WaitPID. Got P...\n");
+
+
 
 	//child = proc_table[i];
 
@@ -590,8 +644,16 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval){
 	}
 
 	*retval = pid;
+	kprintf("Destroying PROC now......\n");
 
-	proc_destroy(proc_table[i]);
+	//proc_destroy(proc_table[i]);
+
+	sem_destroy(proc_table[i]->exitsem);
+	//spinlock_cleanup(*(proc_table[i]->p_lock));
+	kprintf("Everything good. freeing..\n");
+	kfree(proc_table[i]->p_name);
+	kfree(proc_table[i]);
+
 
 	return 0;
 }
@@ -630,9 +692,6 @@ int sbrk(intptr_t amount, int *retval){
 
 int sys_execv(const char *program, char **user_args){
 
-	(void) program;
-	(void) user_args;
-	return 0;
 
 	/* int res, length, index = 0, i = 0;
 	struct lock *lock;
@@ -783,6 +842,65 @@ int sys_execv(const char *program, char **user_args){
 	enter_new_process(index, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 	panic("panic enter_new_process");
 	return EINVAL; */
+	(void) user_args;
+
+	struct addrspace *as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+
+	/* Open the file. */
+	result = vfs_open((char *)program, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+
+	/* We should be a new process. */
+	proc_setas(NULL);
+	KASSERT(proc_getas() == NULL);
+
+	/* Create a new address space. */
+	as = as_create();
+	if (as == NULL) {
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	proc_setas(as);
+	as_activate();
+
+	
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	//curproc->pid = PID_MIN;
+
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+
+	/* Warp to user mode. */
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  NULL /*userspace addr of environment*/,
+			  stackptr, entrypoint);
+
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
 
 }
 

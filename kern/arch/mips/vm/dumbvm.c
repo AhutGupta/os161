@@ -407,6 +407,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
 	new = as_create();
 	if (new==NULL) {
+		kprintf("Reached 1st condition in as_copy........\n");
 		return ENOMEM;
 	}
 
@@ -418,6 +419,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	/* (Mis)use as_prepare_load to allocate some physical memory. */
 	if (as_prepare_load(new)) {
 		as_destroy(new);
+		kprintf("Reached 2nd condition in as_copy........\n");
 		return ENOMEM;
 	}
 

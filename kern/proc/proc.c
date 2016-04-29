@@ -60,7 +60,8 @@ struct proc *kproc;
 struct lock* proc_lock;
 
 pid_t givepid(void) {
-	for(pid_t i = PID_MIN; i<MAX_PROC; i++){
+	pid_t i;
+	for(i = PID_MIN; i<MAX_PROC; i++){
 		if(proc_table[i]==NULL)
 			return i;
 	}
@@ -95,6 +96,8 @@ struct proc *proc_create(const char *name)
 	proc->p_cwd = NULL;
 
 	proc->ppid = 0;
+	proc->pid = 1;
+
 	proc->exited = false;
 	proc->exitcode = 0;
 	proc->self = curthread;
@@ -146,12 +149,16 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
-
-	lock_acquire(proc_lock);
-	kfree(proc_table[proc->pid]);
-	lock_release(proc_lock);
+	pid_t i = proc->pid;
 
 	sem_destroy(proc->exitsem);
+
+	kprintf("About to free from proc_table. My PID is: %d..\n", i);
+
+	//lock_acquire(proc_lock);
+	kfree(proc_table[i]);
+	//lock_release(proc_lock);
+
 
 	/*
 	 * We don't take p_lock in here because we must have the only
@@ -160,10 +167,12 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
-	if (proc->p_cwd) {
-		VOP_DECREF(proc->p_cwd);
-		proc->p_cwd = NULL;
-	}
+	kprintf("Doing DEC_REF...\n");
+
+	// if (proc->p_cwd) {
+	// 	VOP_DECREF(proc->p_cwd);
+	// 	proc->p_cwd = NULL;
+	// }
 
 	/* VM fields */
 	if (proc->p_addrspace) {
@@ -201,6 +210,8 @@ proc_destroy(struct proc *proc)
 		 * random other process while it's still running...
 		 */
 		struct addrspace *as;
+		kprintf("Clearing addrspace...\n");
+
 
 		if (proc == curproc) {
 			as = proc_setas(NULL);
@@ -212,9 +223,13 @@ proc_destroy(struct proc *proc)
 		}
 		as_destroy(as);
 	}
+	kprintf("In proc_destroy.. p_numthreads should be 0. But actually are: %d\n", proc->p_numthreads);
+
 
 	KASSERT(proc->p_numthreads == 0);
 	spinlock_cleanup(&proc->p_lock);
+	kprintf("Everything good. freeing..\n");
+
 
 	kfree(proc->p_name);
 	kfree(proc);
