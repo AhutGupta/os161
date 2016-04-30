@@ -692,13 +692,12 @@ int sbrk(intptr_t amount, int *retval){
 int sys_execv(const char *program, char **user_args){
 
 
-	/* int res, length, index = 0, i = 0;
-	struct lock *lock;
-	lock = lock_create("Lock for Execv");
+	int res, length, i = 0, segment = 0;
+	struct lock *exec_lock = lock_create("Lock for Execv");
 	struct vnode *vnode;
 	vaddr_t entrypoint, stackptr;
 
-	lock_acquire(lock);
+	lock_acquire(exec_lock);
 
 	struct addrspace *temporary;
 	temporary = curproc->p_addrspace;
@@ -707,31 +706,65 @@ int sys_execv(const char *program, char **user_args){
 		return EFAULT;
 	}
 
-	char *pname;
+	//Copy and check the Program name...
+	char *progname;
 	size_t size;
 
-	pname = (char *) kmalloc(sizeof(char) *PATH_MAX);
-	res = copyinstr((const_userptr_t) program, pname, PATH_MAX, &size);
+	progname = (char *) kmalloc(sizeof(char)*PATH_MAX);
+	if(progname == NULL){
+		lock_release(exec_lock);
+		return ENOMEM;
+	}
+	res = copyinstr((const_userptr_t) program, progname, PATH_MAX, &size);
 
 	if(res){
-		kfree(pname);
+		lock_release(exec_lock);
+		kfree(progname);
 		return EFAULT;
 	}
 
-	if(size == 1){
-		kfree(pname);
+	if(size == 1){		
+		lock_release(exec_lock);
+		kfree(progname);
 		return EINVAL;
 	}
 
+
+	//Copy and check arguments...
+
 	char **arguments = (char **) kmalloc(sizeof(char **));
+	char *abuf = kmalloc(PAGE_SIZE*sizeof(char));
+	if(abuf == NULL || arguments == NULL){
+		lock_release(exec_lock);
+		kfree(progname);
+		if(abuf != NULL){
+			kfree(abuf);
+		}
+		if(arguments != NULL){
+			kfree(arguments);
+		}
+		return ENOMEM;
+	}
+
 	res = copyin((const_userptr_t) user_args, arguments, sizeof(char **));
 	if(res){
-		kfree(pname);
+		lock_release(exec_lock);
+		kfree(progname);
 		kfree(arguments);
+		kfree(abuf);
 		return EFAULT;
 	}
 
-	while(user_args[i] != NULL ){
+	//Determine length of user_args
+	length = 0;
+	while(user_args[length] != NULL){
+        length++;
+    }
+
+    size_t chunk[length];
+    userptr_t u_argv[length];
+
+	/* while(user_args[i] != NULL ){
 		arguments[i] = (char *) kmalloc(sizeof(char) * PATH_MAX);
 		res = copyinstr((const_userptr_t) user_args[i], arguments[i], PATH_MAX,
 				&size);
@@ -743,163 +776,211 @@ int sys_execv(const char *program, char **user_args){
 		i++;
 	}
 
-	arguments[i] = NULL;
+	arguments[i] = NULL; */
 
-	res = vfs_open(pname, O_RDONLY, 0, &vnode);
+
+ 	while (user_args[i] != NULL){
+     
+        res = copyinstr((const_userptr_t)user_args[i], &abuf[segment], PAGE_SIZE, &chunk[i]);
+        if (res){
+			lock_release(exec_lock);
+			kfree(progname);
+			kfree(arguments);
+			kfree(abuf);
+			return EFAULT;
+	        }
+        segment += chunk[i];
+        i++;
+    }
+
+
+
+	//Arguments ok. Open File now
+	res = vfs_open(progname, O_RDONLY, 0, &vnode);
 	if(res) {
-		kfree(pname);
+		lock_release(exec_lock);
+		kfree(progname);
 		kfree(arguments);
+		kfree(abuf);
 		return res;
 	}
 
-	if(temporary != NULL){
-		as_destroy(temporary);
-		temporary = NULL;
-	}
 
-	KASSERT(temporary == NULL);
-	if((temporary=as_create()) == NULL){
-		kfree(pname);
+	//Create new AddrSpace and load it
+	struct addrspace *new_addr = as_create();
+    if (new_addr == NULL){
+        lock_release(exec_lock);
+		kfree(progname);
 		kfree(arguments);
+		kfree(abuf);
 		vfs_close(vnode);
 		return ENOMEM;
-	}
+    }
+    curproc->p_addrspace = new_addr;
+    as_activate();
 
-	as_activate();
+
 	res = load_elf(vnode, &entrypoint);
 	if(res){
-		kfree(pname);
+		lock_release(exec_lock);
+		kfree(progname);
 		kfree(arguments);
+		kfree(abuf);
+		vfs_close(vnode);
+		curproc->p_addrspace = temporary;
 		return res;
 	}
+
+ 	res = as_define_stack(curproc->p_addrspace, &stackptr);	
+ 	if(res){
+		lock_release(exec_lock);
+		kfree(progname);
+		kfree(arguments);
+		kfree(abuf);
+		vfs_close(vnode);
+		curproc->p_addrspace = temporary;
+
+		return res;
+	}
+
+////////////////////////////////////////////////////////////////////
+	size_t offset = 0;
+    for (i=length-1; i>=0; i--){
+        segment-=chunk[i]; 
+       // Align by 4
+        
+        offset = offset + ((4 - (chunk[i]%4) ) % 4) + chunk[i]; 
+
+        u_argv[i] = (userptr_t)(stackptr - offset);
+
+        res = copyoutstr((const char*)&abuf[segment], u_argv[i], chunk[i], &size);
+        if (res){
+            lock_release(exec_lock);
+			kfree(progname);
+			kfree(arguments);
+			kfree(abuf);
+			vfs_close(vnode);
+			curproc->p_addrspace = temporary;
+			return res;
+        }
+    }
+
+	// while(arguments[index] != NULL){
+	// 	char * arg;
+	// 	length = strlen(arguments[index]) + 1;
+
+	// 	int original_length = length;
+	// 	if(length % 4 != 0){
+	// 		length = length + (4 - length%4);
+	// 	}
+
+	// 	arg = kmalloc(sizeof(length));
+	// 	arg = kstrdup(arguments[index]);
+
+	// 	for(int i=0; i<length; ++i){
+	// 		if(i >= original_length){
+	// 			arg[i] = '\0';
+	// 		}
+	// 		else {
+	// 			arg[i] = arguments[index][i];
+	// 		}
+	// 	}
+
+	// 	stackptr = stackptr - length;
+
+	// 	res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) length);
+	// 	if(res){
+	// 		kfree(pname);
+	// 		kfree(arguments);
+	// 		kfree(arg);
+	// 		return res;
+	// 	}
+
+	// 	kfree(arg);
+	// 	arguments[index] = (char *)stackptr;
+
+	// 	index++;
+	// }
+
+
+	userptr_t udest = u_argv[0] - 4 * (length+1);
+    stackptr = (vaddr_t)udest; 
+    for (i=0; i<length; i++){
+        res = copyout((const void *)&u_argv[i], udest, 4);
+        if (res){
+        	lock_release(exec_lock);
+			kfree(progname);
+			kfree(arguments);
+			kfree(abuf);
+			vfs_close(vnode);
+			curproc->p_addrspace = temporary;		
+			return res;
+        }
+            
+        udest += 4;
+    }
+
 	vfs_close(vnode);
 
-	res = as_define_stack(temporary, &stackptr);
-	if(res){
-		kfree(pname);
-		kfree(arguments);
-		return res;
-	}
-
-	while(arguments[index] != NULL){
-		char * arg;
-		length = strlen(arguments[index]) + 1;
-
-		int original_length = length;
-		if(length % 4 != 0){
-			length = length + (4 - length%4);
-		}
-
-		arg = kmalloc(sizeof(length));
-		arg = kstrdup(arguments[index]);
-
-		for(int i=0; i<length; ++i){
-			if(i >= original_length){
-				arg[i] = '\0';
-			}
-			else {
-				arg[i] = arguments[index][i];
-			}
-		}
-
-		stackptr = stackptr - length;
-
-		res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) length);
-		if(res){
-			kfree(pname);
-			kfree(arguments);
-			kfree(arg);
-			return res;
-		}
-
-		kfree(arg);
-		arguments[index] = (char *)stackptr;
-
-		index++;
-	}
-
-	if(arguments[index] == NULL){
-		stackptr = stackptr - 4*sizeof(char);
-	}
-
-	for(int i = index-1; i >= 0; --i){
-		stackptr = stackptr - sizeof(char*);
-		res = copyout((const void *) (arguments+i), (userptr_t) stackptr, (sizeof(char *)));
-
-		if(res){
-			kfree(pname);
-			kfree(arguments);
-			return res;
-		}
-	}
-	
-	kfree(pname);
+	kfree(progname);
 	kfree(arguments);
+	kfree(abuf);
 
-	lock_release(lock);
+	lock_release(exec_lock);
 
-	enter_new_process(index, (userptr_t) stackptr, NULL, stackptr, entrypoint);
-	panic("panic enter_new_process");
-	return EINVAL; */
-	(void) user_args;
+	enter_new_process(length, (userptr_t) stackptr, NULL, stackptr, entrypoint);
+	panic("panic enter_new_process returned\n");
+	return EINVAL; 
+
+	
+	/* (void) user_args;
 
 	struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
 
-	/* Open the file. */
 	result = vfs_open((char *)program, O_RDONLY, 0, &v);
 	if (result) {
 		return result;
 	}
 
-	/* We should be a new process. */
 	proc_setas(NULL);
 	KASSERT(proc_getas() == NULL);
 
-	/* Create a new address space. */
 	as = as_create();
 	if (as == NULL) {
 		vfs_close(v);
 		return ENOMEM;
 	}
 
-	/* Switch to it and activate it. */
 	proc_setas(as);
 	as_activate();
 
 	
 
-	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
 	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
 		vfs_close(v);
 		return result;
 	}
 
-	/* Done with the file now. */
 	vfs_close(v);
 
 	//curproc->pid = PID_MIN;
 
 
-	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
 	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
 		return result;
 	}
 
-	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  NULL /*userspace addr of environment*/,
+	enter_new_process(0, NULL ,
+			  NULL ,
 			  stackptr, entrypoint);
 
-	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
-	return EINVAL;
+	return EINVAL; */
 
 }
 
