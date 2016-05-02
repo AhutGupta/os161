@@ -689,7 +689,7 @@ int sbrk(intptr_t amount, int *retval){
     return 0;
 }
 
-int sys_execv(const char *program, char **user_args){
+int sys_execv(userptr_t program, userptr_t user_args){
 
 
 	int res, length, i = 0, segment = 0;
@@ -702,7 +702,9 @@ int sys_execv(const char *program, char **user_args){
 	struct addrspace *temporary;
 	temporary = curproc->p_addrspace;
 
-	if(program == NULL || user_args == NULL){
+	char **args = (char **) user_args;
+
+	if(program == NULL || args == NULL){
 		return EFAULT;
 	}
 
@@ -720,6 +722,7 @@ int sys_execv(const char *program, char **user_args){
 	if(res){
 		lock_release(exec_lock);
 		kfree(progname);
+		kprintf("EXECV. Failed to copyin progname\n");
 		return EFAULT;
 	}
 
@@ -729,79 +732,65 @@ int sys_execv(const char *program, char **user_args){
 		return EINVAL;
 	}
 
+	//Determine length(no. of arguments) of user_args
+	length = 0;
+	while(args[length] != NULL){
+        length++;
+    }
+    kprintf("EXECV. %d arguments passed.\n", length);
 
 	//Copy and check arguments...
 
-	char **arguments = (char **) kmalloc(sizeof(char **));
-	char *abuf = kmalloc(PAGE_SIZE*sizeof(char));
-	if(abuf == NULL || arguments == NULL){
+	char **arguments = (char **) kmalloc(sizeof(char **)*length);
+	if(arguments == NULL){
 		lock_release(exec_lock);
 		kfree(progname);
-		if(abuf != NULL){
-			kfree(abuf);
-		}
-		if(arguments != NULL){
-			kfree(arguments);
-		}
+		kprintf("EXECV. Failed to create arguments buffer\n");
 		return ENOMEM;
 	}
 
-	res = copyin((const_userptr_t) user_args, arguments, sizeof(char **));
+	res = copyin((const_userptr_t) args, arguments, (sizeof(char *)*length));
 	if(res){
+		kprintf("EXECV. Failed to copyin args pointers.\n");
 		lock_release(exec_lock);
 		kfree(progname);
 		kfree(arguments);
-		kfree(abuf);
 		return EFAULT;
 	}
 
-	//Determine length of user_args
-	length = 0;
-	while(user_args[length] != NULL){
-        length++;
-    }
+	
 
     size_t chunk[length];
-    userptr_t u_argv[length];
+ 
 
-	/* while(user_args[i] != NULL ){
-		arguments[i] = (char *) kmalloc(sizeof(char) * PATH_MAX);
-		res = copyinstr((const_userptr_t) user_args[i], arguments[i], PATH_MAX,
-				&size);
-		if (res) {
-			kfree(pname);
-			kfree(arguments);
-			return EFAULT;
-		}
-		i++;
-	}
+	//Copy to kernel buffer and pad to the nearest 4....
+	size_t pad;
 
-	arguments[i] = NULL; */
+ 	while (args[i] != NULL){
 
-
- 	while (user_args[i] != NULL){
-     
-        res = copyinstr((const_userptr_t)user_args[i], &abuf[segment], PAGE_SIZE, &chunk[i]);
+        res = copyinstr((const_userptr_t)args[i], arguments[i], ARG_MAX, &chunk[i]);
         if (res){
+        	kprintf("EXECV. Failed to copyin argument strings\n");
 			lock_release(exec_lock);
 			kfree(progname);
 			kfree(arguments);
-			kfree(abuf);
+			//kfree(u_args);
 			return EFAULT;
 	        }
-        segment += chunk[i];
-        i++;
-    }
-
+	        kprintf("Done copying the strings. \n");
+	        i++;
+	    }
+    arguments[length] = NULL;
 
 
 	//Arguments ok. Open File now
 	res = vfs_open(progname, O_RDONLY, 0, &vnode);
 	if(res) {
+		kprintf("EXECV. Failed to open file\n");
 		lock_release(exec_lock);
 		kfree(progname);
 		kfree(arguments);
-		kfree(abuf);
+		//kfree(u_args);
 		return res;
 	}
 
@@ -809,10 +798,11 @@ int sys_execv(const char *program, char **user_args){
 	//Create new AddrSpace and load it
 	struct addrspace *new_addr = as_create();
     if (new_addr == NULL){
+    	kprintf("EXECV. Failed to create new addrspace\n");
         lock_release(exec_lock);
 		kfree(progname);
 		kfree(arguments);
-		kfree(abuf);
+		//kfree(u_args);
 		vfs_close(vnode);
 		return ENOMEM;
     }
@@ -822,10 +812,11 @@ int sys_execv(const char *program, char **user_args){
 
 	res = load_elf(vnode, &entrypoint);
 	if(res){
+		kprintf("EXECV. Failed to load_elf\n");
 		lock_release(exec_lock);
 		kfree(progname);
 		kfree(arguments);
-		kfree(abuf);
+		//kfree(u_args);
 		vfs_close(vnode);
 		curproc->p_addrspace = temporary;
 		return res;
@@ -833,10 +824,11 @@ int sys_execv(const char *program, char **user_args){
 
  	res = as_define_stack(curproc->p_addrspace, &stackptr);	
  	if(res){
+ 		kprintf("EXECV. Failed to as_define_stack\n");
 		lock_release(exec_lock);
 		kfree(progname);
 		kfree(arguments);
-		kfree(abuf);
+		//kfree(u_args);
 		vfs_close(vnode);
 		curproc->p_addrspace = temporary;
 
@@ -844,91 +836,73 @@ int sys_execv(const char *program, char **user_args){
 	}
 
 ////////////////////////////////////////////////////////////////////
-	size_t offset = 0;
-    for (i=length-1; i>=0; i--){
-        segment-=chunk[i]; 
-       // Align by 4
-        
-        offset = offset + ((4 - (chunk[i]%4) ) % 4) + chunk[i]; 
 
-        u_argv[i] = (userptr_t)(stackptr - offset);
+	while(arguments[segment] != NULL){
+		//length = strlen(arguments[segment]);
+		pad = 0;
+		if(chunk[segment]%4 != 0){
+	    	pad = 4 - (chunk[segment]%4);
+	    }
+    	char *arg = kmalloc(sizeof(char)*ARG_MAX);
 
-        res = copyoutstr((const char*)&abuf[segment], u_argv[i], chunk[i], &size);
-        if (res){
-            lock_release(exec_lock);
+	    //arg = u_args[i];
+	    size_t newlength = chunk[segment]+pad;
+	    for(size_t j = 0; j<=newlength; j++){
+	    	if(j < chunk[segment]){
+	    		arg[j] = arguments[segment][j]; 
+	    	}
+	    	else{
+	    		arg[j] = '\0';
+	    	} 	
+	    }
+
+		stackptr = stackptr - newlength;
+
+		res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) newlength);
+		if(res){
+			kprintf("EXECV. Failed to copyout argument strings\n");
+			lock_release(exec_lock);
 			kfree(progname);
 			kfree(arguments);
-			kfree(abuf);
+			//kfree(u_args);
 			vfs_close(vnode);
 			curproc->p_addrspace = temporary;
 			return res;
-        }
-    }
+		}
+		kprintf("Copied the padded string to stack\n");
 
-	// while(arguments[index] != NULL){
-	// 	char * arg;
-	// 	length = strlen(arguments[index]) + 1;
+		segment++;
+	}
 
-	// 	int original_length = length;
-	// 	if(length % 4 != 0){
-	// 		length = length + (4 - length%4);
-	// 	}
+	if (arguments[segment] == NULL ) {
+		stackptr -= sizeof(char *);
+	}
 
-	// 	arg = kmalloc(sizeof(length));
-	// 	arg = kstrdup(arguments[index]);
-
-	// 	for(int i=0; i<length; ++i){
-	// 		if(i >= original_length){
-	// 			arg[i] = '\0';
-	// 		}
-	// 		else {
-	// 			arg[i] = arguments[index][i];
-	// 		}
-	// 	}
-
-	// 	stackptr = stackptr - length;
-
-	// 	res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) length);
-	// 	if(res){
-	// 		kfree(pname);
-	// 		kfree(arguments);
-	// 		kfree(arg);
-	// 		return res;
-	// 	}
-
-	// 	kfree(arg);
-	// 	arguments[index] = (char *)stackptr;
-
-	// 	index++;
-	// }
-
-
-	userptr_t udest = u_argv[0] - 4 * (length+1);
-    stackptr = (vaddr_t)udest; 
-    for (i=0; i<length; i++){
-        res = copyout((const void *)&u_argv[i], udest, 4);
-        if (res){
-        	lock_release(exec_lock);
+	for (i = (segment - 1); i >= 0; i--) {
+		stackptr = stackptr - sizeof(char*);
+		res = copyout((const void *) (arguments + i), (userptr_t) stackptr, (sizeof(char *)));
+		if (res) {
+			kprintf("EXECV. Failed to copyout arg pointers\n");
+			lock_release(exec_lock);
 			kfree(progname);
 			kfree(arguments);
-			kfree(abuf);
+			//kfree(u_args);
 			vfs_close(vnode);
-			curproc->p_addrspace = temporary;		
+			curproc->p_addrspace = temporary;
 			return res;
-        }
-            
-        udest += 4;
-    }
+		}
+	}
+
 
 	vfs_close(vnode);
 
 	kfree(progname);
 	kfree(arguments);
-	kfree(abuf);
+	//kfree(u_args);
 
 	lock_release(exec_lock);
 
-	enter_new_process(length, (userptr_t) stackptr, NULL, stackptr, entrypoint);
+	enter_new_process(segment, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 	panic("panic enter_new_process returned\n");
 	return EINVAL; 
 
