@@ -44,218 +44,16 @@
 #include <err.h>
 #include <test161/test161.h>
 
-#define FORKTEST_FILENAME_BASE "forktest"
-
-//static char filename[32];
-
-/*
- * This is used by all processes, to try to help make sure all
- * processes have a distinct address space.
- */
-static volatile int mypid;
-
-/*
- * Helper function to do pow()
- 
-static
-int pow_int(int x, int y) {
-	int i;
-	int result = 1;
-	for(i = 0; i < y; i++)
-		result *= x;
-	return result;
-}
- */
-/*
- * Helper function for fork that prints a warning on error.
- */
-static
-int
-dofork(void)
-{
-	int pid;
-	pid = fork();
-	if (pid < 0) {
-		warn("fork");
-	}
-	return pid;
-}
-
-/*
- * Check to make sure each process has its own address space. Write
- * the pid into the data segment and read it back repeatedly, making
- * sure it's correct every time.
- 
-static
-void
-check(void)
-{
-	int i;
-
-	mypid = getpid();
-
-	//Make sure each fork has its own address space.
-	nprintf(".");
-	for (i=0; i<800; i++) {
-		volatile int seenpid;
-		seenpid = mypid;
-		if (seenpid != getpid()) {
-			errx(1, "pid mismatch (%d, should be %d) "
-			     "- your vm is broken!",
-			     seenpid, getpid());
+//#define FORKTEST_FILENAME_BASE "forktest"
+static int dofork(void)
+	{
+		int id;
+		id = fork();
+		if (id < 0) {
+			warn("fork");
 		}
+		return id;
 	}
-}
-
-*/
-/*
- * Wait for a child process.
- *
- * This assumes dowait is called the same number of times as dofork
- * and passed its results in reverse order. Any forks that fail send
- * us -1 and are ignored. The first 0 we see indicates the fork that
- * generated the current process; that means it's time to exit. Only
- * the parent of all the processes returns from the chain of dowaits.
- 
-static
-void
-dowait(int nowait, int pid)
-{
-	int x;
-
-	if (pid<0) {
-		///* fork in question failed; just return 
-		return;
-	}
-	if (pid==0) {
-		///* in the fork in question we were the child; exit
-		exit(0);
-	}
-
-	if (!nowait) {
-		if (waitpid(pid, &x, 0)<0) {
-			errx(1, "waitpid");
-		}
-		else if (WIFSIGNALED(x)) {
-			errx(1, "pid %d: signal %d", pid, WTERMSIG(x));
-		}
-		else if (WEXITSTATUS(x) != 0) {
-			errx(1, "pid %d: exit %d", pid, WEXITSTATUS(x));
-		}
-	}
-}
- */
-/*
- * Actually run the test.
- 
-static
-void
-test(int nowait)
-{
-	int pid0, pid1, pid2, pid3;
-
-	/*
-	 * Caution: This generates processes geometrically.
-	 *
-	 * It is unrolled to encourage gcc to registerize the pids,
-	 * to prevent wait/exit problems if fork corrupts memory.
-	 
-
-	/*
-	 * Guru: We have a problem here.
-	 * We need to write the output to a file since test161 is
-	 * supposed to be as simple as possible. This requires the
-	 * test to tell test161 whether it passed or succeeded.
-	 * We cannot lseek and read stdout, to check the output,
-	 * so we need to write the output to a file and then check it later.
-	 *
-	 * So far so good. However, if in the future, forktest is
-	 * going to be combined with triple/quint/etc, then the filename
-	 * cannot be the same across multiple copies. So we need a
-	 * unique filename per instance of forktest.
-	 * So...
-	 
-	snprintf(filename, 32, "%s-%d.bin", FORKTEST_FILENAME_BASE, getpid());
-	int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
-	if(fd < 3) {
-		// 0, 1, 2 are stdin, stdout, stderr
-		err(1, "Failed to open file to write data into\n");
-	}
-
-	pid0 = dofork();
-	nprintf(".");
-	write(fd, "A", 1);
-	check();
-	pid1 = dofork();
-	nprintf(".");
-	write(fd, "B", 1);
-	check();
-	pid2 = dofork();
-	nprintf(".");
-	write(fd, "C", 1);
-	check();
-	pid3 = dofork();
-	nprintf(".");
-	write(fd, "D", 1);
-	check();
-
-	/*
-	 * These must be called in reverse order to avoid waiting
-	 * improperly.
-	 
-	dowait(nowait, pid3);
-	nprintf(".");
-	dowait(nowait, pid2);
-	nprintf(".");
-	dowait(nowait, pid1);
-	nprintf(".");
-	dowait(nowait, pid0);
-	nprintf(".");
-
-	// Check if file contents are correct
-	// lseek may not be implemented..so close and reopen
-	close(fd);
-	fd = open(filename, O_RDONLY);
-	if(fd < 3) {
-		err(1, "Failed to open file for verification\n");
-	}
-	nprintf(".");
-
-	char buffer[30];
-	int len;
-	int char_idx, i;
-	int observed, expected;
-	char character = 'A';
-
-	memset(buffer, 0, 30);
-	len = read(fd, buffer, 30);
-	printf("\n%s\n", buffer);
-	if(len != 30) {
-		err(1, "Did not get expected number of characters\n");
-	}
-	nprintf(".");
-	// Check if number of instances of each character is correct
-	// 2As; 4Bs; 8Cs; 16Ds
-	for(char_idx = 0; char_idx < 4; char_idx++) {
-		nprintf(".");
-		observed = 0;
-		expected = pow_int(2, char_idx + 1);
-		for(i = 0; i < 30; i++) {
-			// In C, char can be directly converted to an ASCII index
-			// So, A is 65, B is 66, ...
-			if(buffer[i] == character + char_idx) {
-				observed++;
-			}
-		}
-		if(observed != expected) {
-			// Failed
-			err(1, "Failed! Expected %d%cs..observed: %d\n", expected, character + char_idx, observed);
-		}
-	}
-	nprintf("\n");
-	success(TEST161_SUCCESS, SECRET, "/testbin/forktest");
-	close(fd);
-} */
 
 int
 main(int argc, char *argv[])
@@ -278,31 +76,21 @@ main(int argc, char *argv[])
 
 	warnx("Complete.");
 	return 0; */
+
 	(void) argc;
 	(void) argv;
 	int x = 0;
 	int returnValue;
-	int pid = dofork();
-
-	static
-	int
-	dofork(void)
-	{
-		int id;
-		id = fork();
-		if (id < 0) {
-			warn("fork");
-		}
-		return id;
-	}
+	int pid = dofork(); 	
 
 	if(pid == 0){
 		exit(0);
-		kprintf("Child");
+		//kprintf("Child");
+		write(2, "I am the child\n", 1);
 	} else {
 		returnValue = waitpid(pid, &x, 0);
 		if(returnValue == 0){
-			kprintf("Success");
+		write(2, "I am the parent\n", 1);
 		}
 	}
 } 
