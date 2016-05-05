@@ -1,12 +1,10 @@
 ---
 name: "Semaphore Test"
 description:
-  Tests core semaphore logic through cyclic signaling.
-tags: [synch, semaphores, kleaks]
+  Tests core semaphore logic through cycling signaling.
+tags: [synch, semaphores]
 depends: [boot]
 sys161:
   cpus: 32
 ---
-khu
 sem1
-khu

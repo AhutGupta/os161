@@ -79,7 +79,7 @@ int sys_dup2(int oldfd, int newfd, int *retval);
 pid_t getpid(void);
 void child_forkentry(void* c_tf, unsigned long c_addrspace);
 pid_t sys_fork(struct trapframe *parent_tf, int *retval);
-pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval);
+pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval, bool is_kernel);
 void sys_exit(int exitcode);
 int sys_execv(userptr_t program, char** user_args);
 // void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr, vaddr_t entrypoint);

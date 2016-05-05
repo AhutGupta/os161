@@ -134,6 +134,7 @@ struct addrspace *proc_setas(struct addrspace *);
 /* Process ID Allocation */
 pid_t pid_alloc(void);
 pid_t givepid(void);
+void remove_pid(pid_t pid);
 struct proc * proc_create(const char *name);
 
 void entrypoint(void* data1, unsigned long data2);
@@ -142,7 +143,7 @@ void entrypoint(void* data1, unsigned long data2);
 // int pid_wait(pid_t theirpid, int *status, int flags, pid_t *ret);
 void sys_exit(int exitcode);
 void destroy_process(pid_t pid);
-pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval);
+pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval, bool is_kernel);
 int copyout(const void *src, userptr_t userdest, size_t len);
 
 #endif /* _PROC_H_ */
