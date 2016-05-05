@@ -672,12 +672,12 @@ int sys_execv(userptr_t program, char** user_args){
 	char *progname;
 	size_t size;
 
-	progname = (char *) kmalloc(sizeof(char)*PATH_MAX);
+	progname = (char *) kmalloc(sizeof(char)*NAME_MAX);
 	if(progname == NULL){
 		lock_release(exec_lock);
 		return ENOMEM;
 	}
-	res = copyinstr((const_userptr_t) program, progname, PATH_MAX, &size);
+	res = copyinstr((const_userptr_t) program, progname, NAME_MAX, &size);
 
 	if(res){
 		lock_release(exec_lock);
@@ -718,7 +718,7 @@ int sys_execv(userptr_t program, char** user_args){
 	while(i < length){
 
 		char *temp = (char *)kmalloc(ARG_MAX);
-		res = copyinstr((const_userptr_t)user_args[i], temp, ARG_MAX, &chunk[i]);
+		res = copyinstr((const_userptr_t)user_args[i], temp, PAGE_SIZE, &chunk[i]);
         if (res){
         	kprintf("EXECV. Failed to copyin argument strings. For temp.\n");
 			lock_release(exec_lock);
@@ -740,7 +740,7 @@ int sys_execv(userptr_t program, char** user_args){
  	while (user_args[i] != NULL){
 
         arguments[i] = (char *)kmalloc(sizeof(char)*chunk[i]);
-        res = copyinstr((const_userptr_t)user_args[i], arguments[i], ARG_MAX, &chunk[i]);
+        res = copyinstr((const_userptr_t)user_args[i], arguments[i], chunk[i], &chunk[i]);
         if (res){
         	kprintf("EXECV. Failed to copyin argument strings\n");
 			lock_release(exec_lock);
