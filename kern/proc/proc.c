@@ -303,6 +303,7 @@ proc_addthread(struct proc *proc, struct thread *t)
 
 	spinlock_acquire(&proc->p_lock);
 	proc->p_numthreads++;
+	proc->self = t;
 	spinlock_release(&proc->p_lock);
 
 	spl = splhigh();

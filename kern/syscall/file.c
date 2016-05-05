@@ -473,7 +473,7 @@ pid_t sys_fork(struct trapframe *parent_tf, int *retval){
 		return ENOMEM;
 	}
 
-	*retval = child_proc->pid;
+	*retval = c_pid;
 
 	return 0;
 }
