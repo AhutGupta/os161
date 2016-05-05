@@ -412,8 +412,6 @@ int sys_dup2(int oldfd, int newfd, int *retval){
 	else {
 		curthread->file_table[newfd] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
 	}
-
-
 	curthread->file_table[newfd]->flags = curthread->file_table[oldfd]->flags;
 	curthread->file_table[newfd]->offset = curthread->file_table[oldfd]->offset;
 	curthread->file_table[newfd]->ref_count = curthread->file_table[oldfd]->ref_count;
@@ -511,38 +509,6 @@ void entrypoint(void* data1, unsigned long data2) {
 
 void sys_exit(int exitcode){
 
-	// pid_t j;
-	// int i,r;
-	// for(i=0; i<OPEN_MAX; ++i){
-	// 	if(curthread->file_table[i] != NULL){
-	// 		sys_close(i, &r);
-	// 	}
-	// }
-
-	// for(j=PID_MIN; j<MAX_PROC; j++){
-	// 		if(curproc->pid == j){
-	// 			//kprintf("EXIT. Found my PID: %d, AND PPID: %d", j, curproc->ppid);
-	// 			break;
-	// 		}
-	// 	}
-
-	//kprintf("Exited from FOR loop...\n");
-
-	// if(j == MAX_PROC || proc_table[j] == NULL){
-	// 	kprintf("This Process ID %d is not there in Table.", curproc->pid);
-	// 	panic("Did not find this Process in the proc_table\n");
-	// }
-
-	// if (curproc->p_addrspace) {
-	// 	//struct addrspace *as = curproc->p_addrspace;
-	// 	struct addrspace *as = proc_setas(NULL);
-	// 	as_destroy(as);
-	// 	//kprintf("Cleared Addrspace in sys_exit...\n");
-	// }
-
-	// exitcode = 0;
-	// proc_table[j]->exitcode = _MKWAIT_EXIT(exitcode);
-	// proc_table[j]->exited = true;
 	curproc->exitcode = _MKWAIT_EXIT(exitcode);
 	curproc->exited = true;
 	//kprintf("Was able to set the exitcode...\n");
@@ -654,7 +620,7 @@ void remove_pid(pid_t pid){
 }
 
 int sbrk(intptr_t amount, int *retval){
-	/*struct addrspace *as = proc_getas();
+	struct addrspace *as = proc_getas();
 
     if (amount == 0){
     	*retval = as->heap_end;
@@ -679,230 +645,9 @@ int sbrk(intptr_t amount, int *retval){
 
     	*retval = -1;
     	return ENOMEM;
-    } */
-    (void) amount;
-    (void) *retval;
+    }
     return 0;
 }
-
-// int sys_execv(userptr_t program, char** user_args){
-
-
-// 	int res, length, i = 0, segment = 0;
-// 	struct lock *exec_lock = lock_create("Lock for Execv");
-// 	struct vnode *vnode;
-// 	vaddr_t entrypoint, stackptr;
-
-// 	lock_acquire(exec_lock);
-
-// 	struct addrspace *temporary;
-// 	temporary = curproc->p_addrspace;
-
-// 	char **args = (char **) user_args;
-
-// 	if(program == NULL || args == NULL){
-// 		return EFAULT;
-// 	}
-
-// 	//Copy and check the Program name...
-// 	char *progname;
-// 	size_t size;
-
-// 	progname = (char *) kmalloc(sizeof(char)*PATH_MAX);
-// 	if(progname == NULL){
-// 		lock_release(exec_lock);
-// 		return ENOMEM;
-// 	}
-// 	res = copyinstr((const_userptr_t) program, progname, PATH_MAX, &size);
-
-// 	if(res){
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kprintf("EXECV. Failed to copyin progname\n");
-// 		return EFAULT;
-// 	}
-
-// 	if(size == 1){		
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		return EINVAL;
-// 	}
-
-// 	//Determine length(no. of arguments) of user_args
-// 	length = 0;
-// 	while(args[length] != NULL){
-//         length++;
-//     }
-//     kprintf("EXECV. %d arguments passed.\n", length);
-
-// 	//Copy and check arguments...
-
-// 	char **arguments = (char **) kmalloc(sizeof(char **)*length);
-// 	if(arguments == NULL){
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kprintf("EXECV. Failed to create arguments buffer\n");
-// 		return ENOMEM;
-// 	}
-
-// 	res = copyin((const_userptr_t) args, arguments, (sizeof(char *)*length));
-// 	if(res){
-// 		kprintf("EXECV. Failed to copyin args pointers.\n");
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kfree(arguments);
-// 		return EFAULT;
-// 	}
-
-	
-
-//     size_t chunk[length];
- 
-
-// 	//Copy to kernel buffer and pad to the nearest 4....
-// 	size_t pad;
-
-//  	while (args[i] != NULL){
-
-//         res = copyinstr((const_userptr_t)args[i], arguments[i], ARG_MAX, &chunk[i]);
-//         if (res){
-//         	kprintf("EXECV. Failed to copyin argument strings\n");
-// 			lock_release(exec_lock);
-// 			kfree(progname);
-// 			kfree(arguments);
-// 			//kfree(u_args);
-// 			return EFAULT;
-// 	        }
-// 	        kprintf("Done copying the strings. \n");
-// 	        i++;
-// 	    }
-//     arguments[length] = NULL;
-
-
-// 	//Arguments ok. Open File now
-// 	res = vfs_open(progname, O_RDONLY, 0, &vnode);
-// 	if(res) {
-// 		kprintf("EXECV. Failed to open file\n");
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kfree(arguments);
-// 		//kfree(u_args);
-// 		return res;
-// 	}
-
-
-// 	//Create new AddrSpace and load it
-// 	struct addrspace *new_addr = as_create();
-//     if (new_addr == NULL){
-//     	kprintf("EXECV. Failed to create new addrspace\n");
-//         lock_release(exec_lock);
-// 		kfree(progname);
-// 		kfree(arguments);
-// 		//kfree(u_args);
-// 		vfs_close(vnode);
-// 		return ENOMEM;
-//     }
-//     curproc->p_addrspace = new_addr;
-//     as_activate();
-
-
-// 	res = load_elf(vnode, &entrypoint);
-// 	if(res){
-// 		kprintf("EXECV. Failed to load_elf\n");
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kfree(arguments);
-// 		//kfree(u_args);
-// 		vfs_close(vnode);
-// 		curproc->p_addrspace = temporary;
-// 		return res;
-// 	}
-
-//  	res = as_define_stack(curproc->p_addrspace, &stackptr);	
-//  	if(res){
-//  		kprintf("EXECV. Failed to as_define_stack\n");
-// 		lock_release(exec_lock);
-// 		kfree(progname);
-// 		kfree(arguments);
-// 		//kfree(u_args);
-// 		vfs_close(vnode);
-// 		curproc->p_addrspace = temporary;
-
-// 		return res;
-// 	}
-
-// ////////////////////////////////////////////////////////////////////
-
-// 	while(arguments[segment] != NULL){
-// 		//length = strlen(arguments[segment]);
-// 		pad = 0;
-// 		if(chunk[segment]%4 != 0){
-// 	    	pad = 4 - (chunk[segment]%4);
-// 	    }
-//     	char *arg = kmalloc(sizeof(char)*ARG_MAX);
-
-// 	    //arg = u_args[i];
-// 	    size_t newlength = chunk[segment]+pad;
-// 	    for(size_t j = 0; j<=newlength; j++){
-// 	    	if(j < chunk[segment]){
-// 	    		arg[j] = arguments[segment][j]; 
-// 	    	}
-// 	    	else{
-// 	    		arg[j] = '\0';
-// 	    	} 	
-// 	    }
-
-// 		stackptr = stackptr - newlength;
-
-// 		res = copyout((const void *) arg, (userptr_t) stackptr, (size_t) newlength);
-// 		if(res){
-// 			kprintf("EXECV. Failed to copyout argument strings\n");
-// 			lock_release(exec_lock);
-// 			kfree(progname);
-// 			kfree(arguments);
-// 			//kfree(u_args);
-// 			vfs_close(vnode);
-// 			curproc->p_addrspace = temporary;
-// 			return res;
-// 		}
-// 		kprintf("Copied the padded string to stack\n");
-
-// 		segment++;
-// 	}
-
-// 	if (arguments[segment] == NULL ) {
-// 		stackptr -= sizeof(char *);
-// 	}
-
-// 	for (i = (segment - 1); i >= 0; i--) {
-// 		stackptr = stackptr - sizeof(char*);
-// 		res = copyout((const void *) (arguments + i), (userptr_t) stackptr, (sizeof(char *)));
-// 		if (res) {
-// 			kprintf("EXECV. Failed to copyout arg pointers\n");
-// 			lock_release(exec_lock);
-// 			kfree(progname);
-// 			kfree(arguments);
-// 			//kfree(u_args);
-// 			vfs_close(vnode);
-// 			curproc->p_addrspace = temporary;
-// 			return res;
-// 		}
-// 	}
-
-
-// 	vfs_close(vnode);
-
-// 	kfree(progname);
-// 	kfree(arguments);
-// 	//kfree(u_args);
-
-// 	lock_release(exec_lock);
-
-// 	enter_new_process(segment, (userptr_t) stackptr, NULL, stackptr, entrypoint);
-// 	panic("panic enter_new_process returned\n");
-// 	return EINVAL; 
-
-// }
 
 
 int sys_execv(userptr_t program, char** user_args){
