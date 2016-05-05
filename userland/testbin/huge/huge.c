@@ -40,14 +40,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <test161/test161.h>
-#include <test/test.h>
 
 #define PageSize	4096
 #define NumPages	512
 
 int sparse[NumPages][PageSize];	/* use only the first element in the row */
-
-#define PROGRESS_INTERVAL 20
 
 int
 main(void)
@@ -58,33 +55,36 @@ main(void)
 
 	/* move number in so that sparse[i][0]=i */
 	for (i=0; i<NumPages; i++) {
-		TEST161_LPROGRESS_N(i, PROGRESS_INTERVAL);
+		TEST161_TPROGRESS(i);
 		sparse[i][0]=i;
 	}
 
-	lsay("\nstage [1] done\n");
+	tprintf("stage [1] done\n");
+	nprintf("\n");
 
 	/* increment each location 5 times */
 	for (j=0; j<5; j++) {
 		for (i=0; i<NumPages; i++) {
-			TEST161_LPROGRESS_N(i, PROGRESS_INTERVAL);
+			TEST161_TPROGRESS(i);
 			sparse[i][0]++;
 		}
-		lsay("\nstage [2.%d] done\n", j);
+		tprintf("stage [2.%d] done\n", j);
+		nprintf("\n");
 	}
 
-	lsay("\nstage [2] done\n");
+	tprintf("stage [2] done\n");
 
 	/* check if the numbers are sane */
 	for (i=NumPages-1; i>=0; i--) {
-		TEST161_LPROGRESS_N(i, PROGRESS_INTERVAL);
+		TEST161_TPROGRESS(i);
 		if (sparse[i][0]!=i+5) {
-			lsay("BAD NEWS!!! - your VM mechanism has a bug!\n");
+			tprintf("BAD NEWS!!! - your VM mechanism has a bug!\n");
 			success(TEST161_FAIL, SECRET, "/testbin/huge");
 			exit(1);
 		}
 	}
 
+	nprintf("\n");
 	success(TEST161_SUCCESS, SECRET, "/testbin/huge");
 
 	return 0;

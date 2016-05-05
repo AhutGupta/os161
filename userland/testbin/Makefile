@@ -12,13 +12,7 @@ SUBDIRS=add argtest badcall bigexec bigfile bigfork bigseek bloat conman \
 	quinthuge quintmat quintsort randcall redirect rmdirtest rmtest \
 	sbrktest schedpong shll sink sort sparsefile spinner sty tail tictac \
 	triplehuge triplemat triplesort usemtest waiter zero \
-<<<<<<< HEAD
-	consoletest shelltest opentest readwritetest closetest \
-	mytest
-
-=======
-	consoletest shelltest opentest readwritetest closetest stacktest
->>>>>>> 160b83330ef0215827c53cf655bfdb8a4e1480ea
+	consoletest shelltest opentest readwritetest closetest
 
 # But not:
 #    userthreads    (no support in kernel API in base system)

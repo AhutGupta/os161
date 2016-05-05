@@ -61,7 +61,7 @@ main(void)
 
     for (i = 0; i < Dim; i++) {		/* first initialize the matrices */
 		for (j = 0; j < Dim; j++) {
-			TEST161_LPROGRESS_N(i*Dim + j, 1000);
+			TEST161_TPROGRESS_N(i*Dim + j, 1000);
 			A[i][j] = i;
 			B[i][j] = j;
 			C[i][j] = 0;
@@ -72,7 +72,7 @@ main(void)
     for (i = 0; i < Dim; i++) {		/* then multiply them together */
 		for (j = 0; j < Dim; j++) {
             for (k = 0; k < Dim; k++) {
-				TEST161_LPROGRESS_N(i*j*Dim*Dim + k, 50000);
+				TEST161_TPROGRESS_N(i*j*Dim*Dim + k, 50000);
 				T[i][j][k] = A[i][k] * B[k][j];
 			}
 		}
@@ -82,7 +82,7 @@ main(void)
     for (i = 0; i < Dim; i++) {
 		for (j = 0; j < Dim; j++) {
             for (k = 0; k < Dim; k++) {
-				TEST161_LPROGRESS_N(i*j*Dim*Dim + k, 50000);
+				TEST161_TPROGRESS_N(i*j*Dim*Dim + k, 50000);
 				C[i][j] += T[i][j][k];
 			}
 		}
@@ -93,15 +93,15 @@ main(void)
     for (i = 0; i < Dim; i++)
 	    r += C[i][i];
 
-    nprintf("matmult finished.\n");
-    nprintf("answer is: %d (should be %d)\n", r, RIGHT);
+    tprintf("matmult finished.\n");
+    tprintf("answer is: %d (should be %d)\n", r, RIGHT);
     if (r != RIGHT) {
-	    nprintf("FAILED\n");
+	    tprintf("FAILED\n");
 		success(TEST161_FAIL, SECRET, "/testbin/matmult");
 	    return 1;
     }
 
-    nprintf("Passed.\n");
+    tprintf("Passed.\n");
 	success(TEST161_SUCCESS, SECRET, "/testbin/matmult");
     return 0;
 }
