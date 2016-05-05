@@ -92,16 +92,16 @@ struct semaphore *sem;
  * it gets by passing it to vfs_open().
  */
 
-static int waitkernel(pid_t pid){
-	P(proc_table[pid]->exitsem);
-	//kprintf("Got P for Kernel thread. Destroying proc now..\n");
-	//proc_destroy(proc_table[pid]);
-	sem_destroy(proc_table[pid]->exitsem);
-	kfree(proc_table[pid]->p_name);
-	kfree(proc_table[pid]);
-	//kprintf("Wait Process in Kernel Destroyed. Hurray.\n");
-	return 0;
-}
+// static int waitkernel(pid_t pid){
+// 	P(proc_table[pid]->exitsem);
+// 	//kprintf("Got P for Kernel thread. Destroying proc now..\n");
+// 	//proc_destroy(proc_table[pid]);
+// 	sem_destroy(proc_table[pid]->exitsem);
+// 	kfree(proc_table[pid]->p_name);
+// 	kfree(proc_table[pid]);
+// 	//kprintf("Wait Process in Kernel Destroyed. Hurray.\n");
+// 	return 0;
+// }
 
 static
 void
@@ -160,6 +160,9 @@ common_prog(int nargs, char **args)
 	struct proc *proc;
 	int result;
 	unsigned tc;
+	int status=0, retval=0;
+	int j;
+	// int res;
 
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);
@@ -167,7 +170,17 @@ common_prog(int nargs, char **args)
 		return ENOMEM;
 	}
 
+	proc->ppid = curproc->pid;
+
+	for(j=PID_MIN; j<MAX_PROC; ++j){
+		if(proc_table[j] == NULL){
+			proc_table[j] = proc;
+			break;
+		}
+	}
+
 	tc = thread_count;
+	
 
 	result = thread_fork(args[0] /* thread name */,
 			proc /* new process */,
@@ -181,11 +194,12 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
-	while(proc_table[PID_MIN] == NULL){
-		//kprintf("Waiting for the first thread to be created...\n");
-	}
+	// while(proc_table[PID_MIN] == NULL){
+	// 	//kprintf("Waiting for the first thread to be created...\n");
+	// }
 	//kprintf("Calling WaitPID from kernel menu. For PID: %d", PID_MIN);
-	waitkernel(PID_MIN);
+	// waitkernel(PID_MIN);
+	sys_waitpid(proc->pid, &status, 0, &retval, true);
 
 	/*
 	 * The new process will be destroyed when the program exits...

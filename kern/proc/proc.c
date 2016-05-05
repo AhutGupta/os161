@@ -58,6 +58,7 @@
  */
 struct proc *kproc;
 struct lock* proc_lock;
+int allocate_pid = 2;
 
 pid_t givepid(void) {
 	pid_t i;
@@ -75,6 +76,7 @@ pid_t givepid(void) {
 struct proc *proc_create(const char *name)
 {
 	struct proc *proc;
+	int j;
 
 	proc = kmalloc(sizeof(*proc));
 	if (proc == NULL) {
@@ -96,7 +98,14 @@ struct proc *proc_create(const char *name)
 	proc->p_cwd = NULL;
 
 	proc->ppid = 0;
-	proc->pid = 1;
+	proc->pid = allocate_pid;
+	
+	for(j=PID_MIN; j<MAX_PROC; ++j){
+		if(proc_table[j]==NULL && j!=allocate_pid){
+			allocate_pid = j;
+			break;
+		}
+	}
 
 	proc->exited = false;
 	proc->exitcode = 0;
@@ -126,6 +135,13 @@ struct proc *proc_create(const char *name)
 			return NULL;
 		} 
 	} */
+	// int i;
+	// for(i=PID_MIN; i < MAX_PROC; ++i){
+	// 	if(proc_table[i] == NULL){
+	// 		proc_table[i] = proc;
+	// 		break;
+	// 	}
+	// }
 
 	return proc;
 }
@@ -246,6 +262,7 @@ proc_bootstrap(void)
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+	proc_table[PID_MIN] = kproc;
 }
 
 /*

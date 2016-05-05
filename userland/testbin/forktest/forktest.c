@@ -183,18 +183,22 @@ test(int nowait)
 
 	pid0 = dofork();
 	nprintf(".");
+	printf("A");
 	write(fd, "A", 1);
 	check();
 	pid1 = dofork();
 	nprintf(".");
+	printf("B");
 	write(fd, "B", 1);
 	check();
 	pid2 = dofork();
 	nprintf(".");
+	printf("C");
 	write(fd, "C", 1);
 	check();
 	pid3 = dofork();
 	nprintf(".");
+	printf("D");
 	write(fd, "D", 1);
 	check();
 
@@ -229,7 +233,11 @@ test(int nowait)
 	memset(buffer, 0, 30);
 	len = read(fd, buffer, 30);
 	printf("\n%s\n", buffer);
+	// printf(len);
+	// kprintf("len=%d",len);
+	// write(2, len, 1);
 	if(len != 30) {
+		// kprintf("len=%d",len);
 		err(1, "Did not get expected number of characters\n");
 	}
 	nprintf(".");

@@ -126,16 +126,19 @@ copycheck(const_userptr_t userptr, size_t len, size_t *stoplen)
 
 	if (top < bot) {
 		/* addresses wrapped around */
+		kprintf("address wrapped around");
 		return EFAULT;
 	}
 
 	if (bot >= USERSPACETOP) {
 		/* region is within the kernel */
+		kprintf("region within kernel");
 		return EFAULT;
 	}
 
 	if (top >= USERSPACETOP) {
 		/* region overlaps the kernel. adjust the max length. */
+		kprintf("region overlaps kernel");
 		*stoplen = USERSPACETOP - bot;
 	}
 
@@ -157,6 +160,7 @@ copyin(const_userptr_t usersrc, void *dest, size_t len)
 
 	result = copycheck(usersrc, len, &stoplen);
 	if (result) {
+		kprintf("here");
 		return result;
 	}
 	if (stoplen != len) {

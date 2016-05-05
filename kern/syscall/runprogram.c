@@ -59,6 +59,12 @@ runprogram(char *progname)
 	vaddr_t entrypoint, stackptr;
 	int result;
 
+	result = initial_ftable();
+	if(result){
+		panic("Failed at initial_ftable\n");
+		return result;
+	}
+
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
@@ -92,14 +98,8 @@ runprogram(char *progname)
 	/* Done with the file now. */
 	vfs_close(v);
 
-	curproc->pid = PID_MIN;
-	proc_table[PID_MIN] = curproc;
-
-	result = initial_ftable();
-	if(result){
-		panic("Failed at initial_ftable\n");
-		return result;
-	}
+	// curproc->pid = PID_MIN;
+	// proc_table[PID_MIN] = curproc;
 
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);

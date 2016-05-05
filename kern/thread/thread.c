@@ -528,6 +528,12 @@ thread_fork(const char *name,
 	struct thread *newthread;
 	int result;
 
+	// res = initial_ftable();
+	// if(res){
+	// 	panic("Failed at initial_ftable\n");
+	// 	return result;
+	// }
+
 	newthread = thread_create(name);
 	if (newthread == NULL) {
 		return ENOMEM;
@@ -547,22 +553,25 @@ thread_fork(const char *name,
 
 	/* Thread subsystem fields */
 	newthread->t_cpu = curthread->t_cpu;
-	const char *lockname = "Child_Ftable_lock";
+	// const char *lockname = "Child_Ftable_lock";
 
 	//Copy the File table
-	for(int i=0 ;i<OPEN_MAX;i++){ 
+	for(int i=0 ;i<OPEN_MAX;i++){
 		if(curthread->file_table[i]!=NULL){
-			curthread->file_table[i]->ref_count++;
+			lock_acquire(curthread->file_table[i]->filelock);
 			newthread->file_table[i] = (struct file_handle *)kmalloc(sizeof(struct file_handle*));
 			//memcpy(newthread->file_table[i], curthread->file_table[i], sizeof(struct file_handle*));
-			newthread->file_table[i]->filelock = lock_create(lockname);
-			newthread->file_table[i]->flags = curthread->file_table[i]->flags;
-			newthread->file_table[i]->offset = curthread->file_table[i]->offset;
-			newthread->file_table[i]->ref_count = curthread->file_table[i]->ref_count;
-			newthread->file_table[i]->vnode = curthread->file_table[i]->vnode;
+			// newthread->file_table[i]->filelock = lock_create(lockname);
+			// newthread->file_table[i]->filelock = curthread->file_table[i]->filelock;
+			// // newthread->file_table[i]->flags = curthread->file_table[i]->flags;
+			// // newthread->file_table[i]->offset = curthread->file_table[i]->offset;
+			// newthread->file_table[i]->ref_count = curthread->file_table[i]->ref_count;
+			// newthread->file_table[i]->vnode = curthread->file_table[i]->vnode;
+			newthread->file_table[i] = curthread->file_table[i];
+			curthread->file_table[i]->ref_count++;
+			lock_release(curthread->file_table[i]->filelock);
 		}
 	}
-
 
 	/* Attach the new thread to its process */
 	if (proc == NULL) {
