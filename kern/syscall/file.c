@@ -603,7 +603,7 @@ pid_t sys_waitpid(pid_t pid, int *status, int options, int *retval, bool is_kern
 // <<<<<<< HEAD
 	if(proc_table[pid]->exited == false){
 		P(proc_table[pid]->exitsem);
-		kprintf("In WaitPID. Got P for PID: %d", pid);
+		//kprintf("In WaitPID. Got P for PID: %d", pid);
 
 	}
 
@@ -944,7 +944,7 @@ int sys_execv(userptr_t program, char** user_args){
 	while(user_args[length] != NULL){
         length++;
     }
-    kprintf("EXECV. %d arguments passed.\n", length);
+    //kprintf("EXECV. %d arguments passed.\n", length);
 
 	//Copy and check arguments...
 
