@@ -325,7 +325,7 @@ file      ../common/libtest161/sha256.c
 
 #Coremap 
 
-#file 	  arch/mips/vm/coremap.c
+file 	  arch/mips/vm/coremap.c
 
 #
 # Thread system
@@ -351,7 +351,8 @@ file      proc/proc.c
 
 file      vm/kmalloc.c
 
-optofffile dumbvm   vm/addrspace.c
+#optofffile dumbvm   vm/addrspace.c
+file 	  vm/addrspace.c
 
 #
 # Network

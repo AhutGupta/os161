@@ -45,9 +45,8 @@
 struct addrspace *
 as_create(void)
 {
-	struct addrspace *as;
+	struct addrspace *as = (struct addrspace *)kmalloc(sizeof(struct addrspace));
 
-	as = kmalloc(sizeof(struct addrspace));
 	if (as == NULL) {
 		return NULL;
 	}
@@ -55,7 +54,9 @@ as_create(void)
 	/*
 	 * Initialize as needed.
 	 */
-	as->pages=NULL;
+	struct pagetable_entry* new_page = (struct pagetable_entry*) kmalloc(sizeof(struct pagetable_entry));
+	new_page->next = NULL;
+	as->pages=new_page;
 	as->regionlist=NULL;
 	as->heap_start=0;
 	as->heap_end=0;
@@ -77,7 +78,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	//Copy the pagetable
 	struct pagetable_entry *pagelist = old->pages;
 	while(pagelist!=NULL){
-		struct pagetable_entry *newpage = kmalloc(sizeof(struct pagetable_entry));
+		struct pagetable_entry *newpage = (struct pagetable_entry *)kmalloc(sizeof(struct pagetable_entry));
 		newpage = pagelist;
 		newpage->next=NULL;
 		if(newas->pages==NULL){
@@ -96,7 +97,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	//Copy the regions
 	struct regions *region_list = old->regionlist;
 	while(region_list!=NULL){
-		struct regions *newregion = kmalloc(sizeof(struct regions));
+		struct regions *newregion = (struct regions *)kmalloc(sizeof(struct regions));
 		newregion = region_list;
 		newregion->next=NULL;
 		if(newas->regionlist==NULL){
@@ -209,7 +210,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 
 	struct regions *nextregion;
 	if(as->regionlist==NULL){
-		as->regionlist = kmalloc(sizeof(struct regions));
+		as->regionlist = (struct regions *)kmalloc(sizeof(struct regions));
 		nextregion = as->regionlist;
 	}
 	else{
@@ -217,7 +218,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		while(nextregion->next!=NULL){
 			nextregion = nextregion->next;
 		}
-		nextregion->next = kmalloc(sizeof(struct regions));
+		nextregion->next = (struct regions *)kmalloc(sizeof(struct regions));
 		nextregion = nextregion->next;
 	}
 
@@ -290,7 +291,7 @@ struct pagetable_entry * get_pte(struct addrspace *as, vaddr_t vbase){
 void pte_insert(struct addrspace *as, vaddr_t vbase, vaddr_t pbase, bool perm[3]){
 	vaddr_t v = vbase>>12;
 	vaddr_t p = pbase>>12;
-	struct pagetable_entry *newpage = kmalloc(sizeof(struct pagetable_entry));
+	struct pagetable_entry *newpage = (struct pagetable_entry *)kmalloc(sizeof(struct pagetable_entry));
 	newpage->vaddr = v;
 	newpage->paddr = p;
 	for(int i=0; i<3; i++)

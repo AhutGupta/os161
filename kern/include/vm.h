@@ -67,5 +67,17 @@ unsigned int coremap_used_bytes(void);
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
 
+struct coremap_entry{
+	paddr_t ps_padder;
+	off_t ps_swapaddr;
+	unsigned int cpu_index : 4;
+	int tlb_index : 7;
+	int block_length : 4;
+	bool is_allocated : 1;
+	bool is_pinned : 1;
+};
+
+void initializeCoremap(void);
+
 
 #endif /* _VM_H_ */

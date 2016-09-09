@@ -620,35 +620,33 @@ void remove_pid(pid_t pid){
 }
 
 int sbrk(intptr_t amount, int *retval){
-	// struct addrspace *as = proc_getas();
+	struct addrspace *as = proc_getas();
 
- //    if (amount == 0){
- //    	*retval = as->heap_end;
- //    	return 0;
- //    }
- //    else if(amount<0){
- //    	if ((long)as->heap_end + (long)amount >= (long)as->heap_start) {
- //            as->heap_end += amount;
- //            *retval = as->heap_end;
- //            return 0;
- //        }
- //    	*retval = -1;
- //    	return EINVAL;
- //    }
- //    else{
+    if (amount == 0){
+    	*retval = as->heap_end;
+    	return 0;
+    }
+    else if(amount<0){
+    	if ((long)as->heap_end + (long)amount >= (long)as->heap_start) {
+            as->heap_end += amount;
+            *retval = as->heap_end;
+            return 0;
+        }
+    	*retval = -1;
+    	return EINVAL;
+    }
+    else{
     	
- //    	if ((as->heap_end+amount) < (USERSTACK-STACKPAGES * PAGE_SIZE) && (as->heap_end+amount) < (as->heap_start+HEAP_MAX)) {
- //        *retval = as->heap_end;
- //        as->heap_end += amount;
- //        return 0;
- //    	}
+    	if ((as->heap_end+amount) < (USERSTACK-STACKPAGES * PAGE_SIZE) && (as->heap_end+amount) < (as->heap_start+HEAP_MAX)) {
+        *retval = as->heap_end;
+        as->heap_end += amount;
+        return 0;
+    	}
 
- //    	*retval = -1;
- //    	return ENOMEM;
- //    }
-	(void) amount;
-	(void) retval;
-    return 0;
+    	*retval = -1;
+    	return ENOMEM;
+    }
+    //return 0;
 }
 
 
